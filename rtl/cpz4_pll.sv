@@ -1,6 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 
-module cpz4_pll (
+module cpz4_pll #(
+    parameter ON_CHIP_CAL = 1'b1,
+    parameter [479:0] FIXED_FINE_CENTERS = {
+        // Schematic TT at coarse 52, fine 64. Bin zero is at the LSB.
+        120'hf86ee9ea8e68dd6d46d05cc7c44bbb,
+        120'hb7ab3aaa8a179d79989258ab869826,
+        120'h77f6dd69c65e5db5525114d143f3af,
+        120'h36e32f2ad2241e31a31230a5063020
+    }
+) (
     input  wire         ref_clk,
     input  wire         reset_n,
     input  wire         enable,
@@ -61,9 +70,21 @@ module cpz4_pll (
     wire [12:0] gain;
     wire [3:0] loop_state;
     wire manual_ready = manual && run_n && loop_state == 4'd6;
-    cpz4_phase_cal calibration(ref_clk, ref_reset_n, manual_ready, cal_start, cal_clear,
-                               fine_valid, fine_bin, cfg_data[5:0], fine_center, read_center,
-                               read_hits, cal_busy, cal_valid, cal_error);
+    generate
+        if (ON_CHIP_CAL) begin : measured_centers
+            cpz4_phase_cal calibration(ref_clk, ref_reset_n, manual_ready, cal_start, cal_clear,
+                                       fine_valid, fine_bin, cfg_data[5:0], fine_center, read_center,
+                                       read_hits, cal_busy, cal_valid, cal_error);
+        end else begin : fixed_centers
+            assign fine_center = fine_bin < 6'd40 ? FIXED_FINE_CENTERS[12*fine_bin +: 12] : 12'd0;
+            assign read_center = cfg_data[5:0] < 6'd40 ?
+                                 FIXED_FINE_CENTERS[12*cfg_data[5:0] +: 12] : 12'd0;
+            assign read_hits = 0;
+            assign cal_busy = 0;
+            assign cal_valid = 0;
+            assign cal_error = 0;
+        end
+    endgenerate
     cpz4_loop_control loop_filter(.ref_clk(ref_clk), .reset_n(run_n), .restart(restart),
         .ref_timeout(watchdog_ref), .manual(manual), .dither_enable(dither),
         .manual_code(manual_code), .code_ceiling(code_ceiling), .ref_upper_mhz(ref_upper_mhz),
@@ -72,6 +93,8 @@ module cpz4_pll (
         .locked(core_locked), .fault_code(loop_fault), .gain_q12(gain), .state(loop_state));
 
     // Register each cell command to avoid decoder glitches during binary carries.
+    // Clamp the common coarse command before the 255 registered decodes.
+    wire [7:0] applied_coarse = dco_code < code_ceiling ? dco_code : code_ceiling;
     genvar unit_id;
     generate
         for (unit_id = 0; unit_id < 255; unit_id = unit_id + 1) begin : unit_decoder
@@ -79,7 +102,7 @@ module cpz4_pll (
             reg unit_enable;
             always @(posedge ref_clk or negedge run_n) begin
                 if (!run_n) unit_enable <= 1'b0;
-                else        unit_enable <= dco_code > THRESHOLD && code_ceiling > THRESHOLD;
+                else        unit_enable <= applied_coarse > THRESHOLD;
             end
             assign dco_therm[unit_id] = unit_enable;
         end
@@ -165,7 +188,7 @@ module cpz4_pll (
                             end
                         end else case (cfg_data)
                             17'd1: begin
-                                if (manual && run_n && !cal_active) cal_pending <= 1'b1;
+                                if (ON_CHIP_CAL && manual && run_n && !cal_active) cal_pending <= 1'b1;
                                 else config_error <= 1'b1;
                             end
                             17'd2: begin
@@ -200,6 +223,7 @@ module cpz4_pll (
                             17'd8: read_byte <= fine_code;
                             17'd9: read_byte <= {6'b0, tracking_gear};
                             17'd10: read_byte <= {2'b0, ref_upper_mhz};
+                            17'd11: read_byte <= {7'b0, ON_CHIP_CAL};
                             default: read_byte <= 8'd0;
                         endcase
                     end

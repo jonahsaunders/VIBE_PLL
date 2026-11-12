@@ -2,7 +2,7 @@
 
 ## IP and operation
 
-A 1.8 V Sky130 fractional-N SoC clock multiplier. A five-stage current-starved ring and three delay replicas per tap provide up to 40 phase bins. Dual-edge coarse phase capture and an optional code-density LUT feed a phase-domain PI loop. Guarded coarse acquisition estimates the gain of a separate fine DAC. Three programmable tracking gears trade phase-detector noise against suppression of ring noise. A DCO-clocked watchdog supports reference-loss detection and holdover. The loop filter and oscillator bias are internal.
+A 1.8 V Sky130 fractional-N SoC clock multiplier. A five-stage current-starved ring and three delay replicas per tap provide up to 40 phase bins. Dual-edge coarse phase capture and a 40-bin phase lookup table feed a phase-domain PI loop. Guarded coarse acquisition estimates the gain of a separate fine DAC. Three programmable tracking gears trade phase-detector noise against suppression of ring noise. A DCO-clocked watchdog supports reference-loss detection and holdover. The loop filter and oscillator bias are internal. The area-constrained build uses fixed phase centers and retains a coarse-phase fallback.
 
 ## Ports and pads
 
@@ -32,15 +32,17 @@ The macro uses two dedicated pads and zero shared analog signals. It needs no ex
 | Mean frequency error | | | ±100 ppm over ≥4,096 DCO cycles after lock |
 | Reference-loss detection | | | 2 µs at an in-band output |
 | Nominal active core power | | | 8 mW, excluding pads |
-| Standalone core area | | | 0.10 mm² planning target |
+| Standalone macro area | | | 0.10 mm² planning target, subject to the published slot outline |
 | Nominal integrated jitter | | | 300 ps rms, 10 kHz–10 MHz at 256.25 MHz including spurs |
 
 Valid operation uses ratios that put the output inside 160–300 MHz. The frequency increment is reference/4,096 (6.1035 kHz at 25 MHz). On-chip nodes use the 1.8 V domain and have a 1.95 V model ceiling. Apply only rated peripheral voltages through the chosen approved 3.3 V pads. Absolute electrical limits of the external pad pins follow the approved pad cell. Configure the reference-frequency upper bound and the DCO code ceiling before enabling hardware. Use the extracted high-speed path limit and the characterized DCO step sizes to set the ceiling.
 
+The [area check](../results/slot-fit.md) uses a provisional 400 × 250 µm rectangle with a reserved DCO region and wrapper margin. The official Challenge #4 outline and the final routed macro determine slot fit.
+
 ## Measurement plan
 
 1. Apply a low-jitter calibrated reference at 16, 25 and 32 MHz. Measure divided output and lock on enable, at valid integer and fractional retunes, and on unsupported ratios. Refer mean accuracy to the applied reference.
-2. Sweep coarse and fine tune codes within the permitted ceiling, estimate local fine gain and overlap, and compare LUTs from two asynchronous calibration offsets. Test the expected rejection of a coherent histogram.
+2. Sweep coarse and fine tune codes within the permitted ceiling, estimate local fine gain and overlap, and characterize phase-bin widths across the intended range. Compare the fixed-center and coarse-only detector settings.
 3. Remove and restore the reference. Time lock deassertion and reacquisition while checking that DCO/4 continues in holdover.
 4. Measure phase noise and discrete spurs on integer, quarter, half and near-integer ratios. Record period jitter separately. De-embed additive pad/divider noise and report integration bands and the floor of the setup.
 5. Measure enabled-minus-disabled current and clock characteristics over voltage and temperature. Check extracted supply-pushing sensitivity and phase-capture routing before the slot review.

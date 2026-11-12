@@ -1,5 +1,7 @@
 # Verification results
 
+The [area-constrained build](slot-fit.md) uses the same oscillator schematic. The closed-loop and spectral tables below record the previous self-calibrating revision; the area page reports the latest fixed-center replays.
+
 ## Sky130A schematic
 
 The revised DCO was simulated with ngspice 44.2 and the Sky130A models in Volare release `sky130-fa87f8f4bbcc7255b6f0c0fb506960f531ae2392`. The bench uses 20 fF on tap 0 and 8 fF on each other tap and replica. The sampled grid contains 33 static operating points, all with the expected tap order. At TT, fine code 64 to 65 at coarse code 52 moves the clock from 256.8567 MHz to 257.0261 MHz. See the [adjacent-code sweep](rev2-fine-step.csv). The 169.4 kHz step is about 15 times smaller than the original DCO's 2.519 MHz step near the nominal channel.

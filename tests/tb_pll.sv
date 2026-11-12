@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 `timescale 1ps/1fs
 
-module tb_pll;
+module tb_pll #(parameter ON_CHIP_CAL = 1'b1);
     reg ref_clk = 0, ref_running = 1;
     reg reset_n = 1, enable = 0, cfg_toggle = 0;
     reg [2:0] cfg_addr = 0;
@@ -15,10 +15,12 @@ module tb_pll;
     wire [127:0] fine_therm;
     wire [11:0] status;
 
-    cpz4_pll dut(ref_clk, reset_n, enable, cfg_toggle, cfg_addr, cfg_data, taps, fine_ring,
+    cpz4_pll #(.ON_CHIP_CAL(ON_CHIP_CAL)) dut(ref_clk, reset_n, enable, cfg_toggle, cfg_addr, cfg_data, taps, fine_ring,
                  dco_enable, therm, fine_therm, clk_out, clk_mon, status);
 
     real ref_mhz = 25.0;
+    real startup_delay_ps = 173.209;
+    real peak_mhz;
     real low_mhz = 100.0;
     real high_mhz = 485.0;
     real curvature = 0.18;
@@ -232,10 +234,9 @@ module tb_pll;
         end
     endtask
 
-    real started, lost_us, hold_start, peak_mhz, last_edge_ps, edge_mhz;
+    real started, lost_us, hold_start, last_edge_ps, edge_mhz;
     integer initial_ratio, retune_ratio, value_unused, ref_bound, requested_gear;
     integer cal_code, test_ceiling;
-    real startup_delay_ps = 173.209;
     integer held_coarse, held_fine;
     integer spectrum_file, edge_id;
     string spectrum_path;
@@ -278,6 +279,16 @@ module tb_pll;
         end
         if ($test$plusargs("precalibrate") || $test$plusargs("coarse_phase"))
             transact(3'd1, $test$plusargs("coarse_phase") ? 17'd1026 : 17'd2);
+        transact(3'd5, 17'd11);
+        if (status[7:0] !== {7'b0, ON_CHIP_CAL}) $fatal(1, "Incorrect calibration capability");
+        if (!ON_CHIP_CAL) begin
+            transact(3'd1, 17'd3);
+            enable = 1;
+            transact(3'd2, 17'd1);
+            if (!status[11] || status[10]) $fatal(1, "Fixed table accepted calibration command");
+            transact(3'd2, 17'd4);
+            transact(3'd1, 17'd2);
+        end
         if (initial_ratio != 41984) transact(3'd0, 17'(initial_ratio));
         started = $realtime;
         enable = 1;

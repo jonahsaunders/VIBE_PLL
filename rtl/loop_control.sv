@@ -30,12 +30,11 @@ module cpz4_loop_control (
     localparam [7:0] FINE_MID = 8'd64, FINE_MAX = 8'd128;
     localparam [23:0] MAX_TUNE = {FINE_MAX, 16'b0};
 
-    // A 32-reference-cycle phase delta is in units of 1/(32*4096)
-    // cycles per reference. Reserve 32 MHz for fine motion from midscale
-    // and budget 16 MHz for every positive coarse step.
-    localparam [32:0] CLOCK_LIMIT = 33'd400 << 17;
-    localparam [32:0] COARSE_LIMIT = 33'd368 << 17;
-    localparam [32:0] MIN_RUNNING = 33'd48 << 17;
+    // The guard works in MHz times the 32-cycle measurement window.
+    // Reserve 32 MHz for fine motion and budget 16 MHz per coarse step.
+    localparam [22:0] CLOCK_LIMIT = 23'd400 << 5;
+    localparam [22:0] COARSE_LIMIT = 23'd368 << 5;
+    localparam [22:0] MIN_RUNNING = 23'd48 << 5;
     localparam [22:0] SETPOINT_LIMIT = 23'd350 << 12;
 
     reg [2:0] measurement;
@@ -46,7 +45,6 @@ module cpz4_loop_control (
     reg [7:0] low_code, high_code, best_code;
     reg [3:0] gain_exponent;
     reg monitor_active, fine_retried;
-    reg [23:0] monitor_phase;
 
     reg [23:0] seed_rem, fine_span;
     reg [6:0] seed_code;
@@ -60,9 +58,11 @@ module cpz4_loop_control (
 
     wire [23:0] target_delta = {2'b0, ratio_q12, 5'b0};
     wire [23:0] observed_delta = phase_q12 - anchor;
-    wire below_target = observed_delta < target_delta;
-    wire [23:0] distance = below_target ? target_delta - observed_delta :
-                                         observed_delta - target_delta;
+    wire signed [24:0] target_difference = $signed({1'b0, observed_delta}) -
+                                               $signed({1'b0, target_delta});
+    wire below_target = target_difference[24];
+    wire [23:0] distance = below_target ? -target_difference[23:0] :
+                                         target_difference[23:0];
     wire better_code = distance < best_distance;
     wire [7:0] nearest_code = better_code ? dco_code : best_code;
     wire [7:0] next_low = below_target ? dco_code : low_code;
@@ -70,14 +70,16 @@ module cpz4_loop_control (
     wire [7:0] next_span = next_high - next_low;
     wire [7:0] ramp_span = dco_code - low_code;
 
-    wire [22:0] setpoint_upper = ratio_q12 * ref_upper_mhz;
-    wire [23:0] monitor_delta = phase_q12 - monitor_phase;
-    wire [24:0] delta_upper = {1'b0, state == TRACK || state == MANUAL ? monitor_delta : observed_delta} + 25'd4096;
-    wire [32:0] measured_upper = delta_upper * ref_upper_mhz;
-    wire [32:0] step_headroom = measured_upper < COARSE_LIMIT ? COARSE_LIMIT - measured_upper : 0;
-    wire [11:0] safe_steps = step_headroom[32:21];
+    // Round up the measured phase delta and add the endpoint uncertainty.
+    // START and measurement use the same multiplier at different times.
+    wire [12:0] cycles_ceiling = {1'b0, observed_delta[23:12]} + 13'd1 +
+                                {12'b0, |observed_delta[11:0]};
+    wire [16:0] speed_operand = state == START ? ratio_q12 : {4'b0, cycles_ceiling};
+    wire [22:0] speed_upper = speed_operand * ref_upper_mhz;
+    wire [22:0] step_headroom = speed_upper < COARSE_LIMIT ? COARSE_LIMIT - speed_upper : 0;
+    wire [4:0] safe_steps = step_headroom[13:9];
     wire [4:0] ramp_step = dco_code < 8'd32 ? 5'd8 : 5'd16;
-    wire [4:0] guarded_step = safe_steps < {7'b0, ramp_step} ? safe_steps[4:0] : ramp_step;
+    wire [4:0] guarded_step = safe_steps < ramp_step ? safe_steps : ramp_step;
     wire [8:0] ramp_sum = {1'b0, dco_code} + {4'b0, guarded_step};
     wire [7:0] ramp_limit = manual ? manual_code : code_ceiling;
     wire [7:0] ramp_code = ramp_sum > {1'b0, ramp_limit} ? ramp_limit : ramp_sum[7:0];
@@ -87,20 +89,22 @@ module cpz4_loop_control (
     wire [23:0] rounded_gain = (gain_delta + 24'd2048) >> 12;
     wire [24:0] seed_double = {seed_rem, 1'b0};
     wire seed_bit = seed_double >= {1'b0, fine_span};
-    wire [24:0] seed_next_rem = seed_bit ? seed_double - {1'b0, fine_span} : seed_double;
+    wire [24:0] seed_difference = seed_double - {1'b0, fine_span};
+    wire [23:0] seed_next_rem = seed_bit ? seed_difference[23:0] : seed_double[23:0];
     wire [6:0] seed_next_code = {seed_code[5:0], seed_bit};
 
     wire [23:0] next_phase = target_phase + {7'b0, ratio_q12};
     wire signed [23:0] phase_error = $signed(next_phase - phase_q12);
-    wire signed [23:0] limited_error = phase_error > 24'sd8192 ? 24'sd8192 :
-        phase_error < -24'sd8192 ? -24'sd8192 : phase_error;
-    wire signed [39:0] scaled_error = {{16{limited_error[23]}}, limited_error} <<< 16;
+    wire error_negative = phase_error[23];
+    wire [13:0] error_magnitude = (phase_error > 24'sd8192 || phase_error < -24'sd8192) ?
+        14'd8192 : error_negative ? -phase_error[13:0] : phase_error[13:0];
     wire phase_close = phase_error >= -24'sd1024 && phase_error <= 24'sd1024;
     wire phase_far = phase_error < -24'sd2048 || phase_error > 24'sd2048;
-    wire [4:0] p_shift = {1'b0, gain_exponent} +
-                         (locked ? 5'd5 + {3'b0, tracking_gear} : 5'd4);
-    wire [4:0] i_shift = {1'b0, gain_exponent} +
-                         (locked ? 5'd11 + {2'b0, tracking_gear, 1'b0} : 5'd9);
+    wire [25:0] normalized_error = {error_magnitude, 12'b0} >> gain_exponent;
+    wire [25:0] p_magnitude = locked ? (normalized_error >> 1) >> tracking_gear :
+                                      normalized_error;
+    wire [20:0] i_magnitude = locked ? {2'b0, normalized_error[25:7]} >> {tracking_gear, 1'b0} :
+                                      normalized_error[25:5];
     wire monitoring = state == TRACK || state == MANUAL;
 
     function automatic [3:0] highest_bit(input [12:0] value);
@@ -112,30 +116,20 @@ module cpz4_loop_control (
         end
     endfunction
 
-    function automatic signed [31:0] scale_toward_zero(
-        input signed [39:0] value,
-        input [4:0] amount
-    );
-        reg signed [39:0] magnitude;
-        begin
-            magnitude = value < 0 ? -value : value;
-            magnitude = magnitude >>> amount;
-            scale_toward_zero = value < 0 ? -$signed(magnitude[31:0]) : $signed(magnitude[31:0]);
-        end
-    endfunction
-
-    function automatic [23:0] clamp_tune(input signed [31:0] value);
+    function automatic [23:0] clamp_tune(input signed [26:0] value);
         begin
             if (value < 0) clamp_tune = 0;
-            else if (value > $signed({8'b0, MAX_TUNE})) clamp_tune = MAX_TUNE;
+            else if (value > $signed({3'b0, MAX_TUNE})) clamp_tune = MAX_TUNE;
             else clamp_tune = value[23:0];
         end
     endfunction
 
-    wire signed [31:0] i_step = scale_toward_zero(scaled_error, i_shift);
-    wire signed [31:0] p_step = scale_toward_zero(scaled_error, p_shift);
-    wire [23:0] next_integrator = clamp_tune($signed({8'b0, integrator}) + i_step);
-    wire [23:0] next_tune = clamp_tune($signed({8'b0, next_integrator}) + p_step);
+    wire signed [26:0] i_step = $signed({6'b0, i_magnitude} ^ {27{error_negative}});
+    wire signed [26:0] p_step = $signed({1'b0, p_magnitude} ^ {27{error_negative}});
+    wire [23:0] next_integrator = clamp_tune(
+        $signed({3'b0, integrator}) + i_step + $signed({26'b0, error_negative}));
+    wire [23:0] next_tune = clamp_tune(
+        $signed({3'b0, next_integrator}) + p_step + $signed({26'b0, error_negative}));
     wire [16:0] residue_sum = {1'b0, dither_residue} + {1'b0, next_tune[15:0]};
     wire increment_code = dither_enable ? residue_sum[16] : next_tune[15];
     wire fine_rail = (next_tune == 0 && phase_error < 0) ||
@@ -180,7 +174,6 @@ module cpz4_loop_control (
             high_code        <= 0;
             best_code        <= 0;
             monitor_active   <= 0;
-            monitor_phase    <= 0;
             fine_retried     <= 0;
             seed_rem         <= 0;
             fine_span        <= 0;
@@ -205,7 +198,7 @@ module cpz4_loop_control (
                      acquire_ticks == 11'd2047) begin
             trip(NO_LOCK);
         end else if (monitoring && monitor_active && measure_left == 0 &&
-                     phase_valid && measured_upper > CLOCK_LIMIT) begin
+                     phase_valid && speed_upper > CLOCK_LIMIT) begin
             trip(SPEED_GUARD);
         end else begin
             if (!locked && state != FAULT && state != MANUAL)
@@ -214,7 +207,7 @@ module cpz4_loop_control (
                 if (!monitor_active || measure_left == 0) begin
                     monitor_active <= phase_valid;
                     if (phase_valid) begin
-                        monitor_phase <= phase_q12;
+                        anchor       <= phase_q12;
                         measure_left <= 5'd31;
                     end
                 end else measure_left <= measure_left - 5'd1;
@@ -222,7 +215,7 @@ module cpz4_loop_control (
 
             case (state)
                 START: begin
-                    if (!manual && setpoint_upper > SETPOINT_LIMIT) trip(SPEED_GUARD);
+                    if (!manual && speed_upper > SETPOINT_LIMIT) trip(SPEED_GUARD);
                     else begin
                         state          <= SETTLE;
                         measurement    <= LOW_RAIL;
@@ -252,9 +245,9 @@ module cpz4_loop_control (
                 MEASURE: begin
                     if (measure_left != 0) measure_left <= measure_left - 5'd1;
                     else if (!phase_valid) state <= SETTLE;
-                    else if (measurement == LOW_RAIL && measured_upper < MIN_RUNNING)
+                    else if (measurement == LOW_RAIL && speed_upper < MIN_RUNNING)
                         trip(START_STALLED);
-                    else if (measured_upper > (measurement <= SEARCH ? COARSE_LIMIT : CLOCK_LIMIT))
+                    else if (speed_upper > (measurement <= SEARCH ? COARSE_LIMIT : CLOCK_LIMIT))
                         trip(SPEED_GUARD);
                     else begin
                         if (!manual && measurement <= SEARCH && better_code) begin
@@ -333,7 +326,7 @@ module cpz4_loop_control (
                 end
                 SEED: begin
                     // Seven restoring-division steps give the initial fine code.
-                    seed_rem  <= seed_next_rem[23:0];
+                    seed_rem  <= seed_next_rem;
                     seed_code <= seed_next_code;
                     seed_left <= seed_left - 3'd1;
                     if (seed_left == 3'd1) begin

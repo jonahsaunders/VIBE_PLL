@@ -89,21 +89,27 @@ def main():
     parser.add_argument("--tracking-gear", type=int, choices=(0, 1, 2))
     parser.add_argument("--calibrate", action="store_true", help="load a manual code-density LUT")
     parser.add_argument("--cal-code", type=int, default=70, help="manual coarse code for calibration")
+    parser.add_argument("--fixed-centers", action="store_true", help="use the area-saving fixed TDC table")
     parser.add_argument("--coarse-phase", action="store_true", help="use the ten-bin detector for the loop")
     parser.add_argument("--startup-delay-ps", type=float, default=173.209,
                         help="initial oscillator phase offset in the behavioral plant")
     args = parser.parse_args()
+    if args.fixed_centers and args.calibrate:
+        parser.error("--calibrate requires on-chip calibration")
     with tempfile.TemporaryDirectory(prefix="cpz4-rtl-") as temp:
         build = Path(temp)
         output = build / "tb_pll.vvp"
         common = [args.iverilog, "-g2012", "-Wall", "-Wno-timescale"]
-        subprocess.run([*common, "-s", "cpz4_sky130", "-t", "null", *RTL], check=True)
+        parameter = int(not args.fixed_centers)
+        subprocess.run([*common, "-s", "cpz4_sky130", f"-Pcpz4_sky130.ON_CHIP_CAL={parameter}",
+                        "-t", "null", *RTL], check=True)
         if not args.spice_data and not args.spectrum:
             counter = build / "tb_edge_counter.vvp"
             subprocess.run([*common, "-s", "tb_edge_counter", "-o", counter, RTL[0],
                             ROOT / "tests" / "tb_edge_counter.sv"], check=True)
             subprocess.run([args.vvp, counter], check=True)
-        subprocess.run([*common, "-s", "tb_pll", "-o", output, *RTL, ROOT / "tests" / "tb_pll.sv"], check=True)
+        subprocess.run([*common, "-s", "tb_pll", f"-Ptb_pll.ON_CHIP_CAL={parameter}",
+                        "-o", output, *RTL, ROOT / "tests" / "tb_pll.sv"], check=True)
         if args.spice_data:
             table = build / "dco.txt"
             max_code = spice_table(args.spice_data, table)
@@ -120,7 +126,8 @@ def main():
                 extra.append(f"+start_n={args.start}")
             scenarios = {"behavioral_spectrum": extra}
         else:
-            scenarios = SCENARIOS
+            scenarios = {label: [arg for arg in options if arg != "+calibrate" or not args.fixed_centers]
+                         for label, options in SCENARIOS.items()}
         for label, options in scenarios.items():
             print(f"CASE {label}", flush=True)
             command = [args.vvp, output, *options, f"+startup_delay_ps={args.startup_delay_ps}"]
