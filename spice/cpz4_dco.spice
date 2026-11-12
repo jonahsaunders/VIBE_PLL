@@ -1,0 +1,356 @@
+* SPDX-License-Identifier: Apache-2.0
+* CPZ4 DCO. Geometry is in microns under the Sky130 SPICE library scale.
+* DCO pin order: vdd vss enable, therm_0..254, tap_0..4.
+.subckt cpz4_starved_stage a z bp bn vdd vss
+Xp_starve up bp vdd vdd sky130_fd_pr__pfet_01v8 w=5.6 l=0.5 nf=1 ad=1.624 as=1.624 pd=11.78 ps=11.78 nrd=0.05179 nrs=0.05179
+Xp_core z a up vdd sky130_fd_pr__pfet_01v8 w=3.36 l=0.15 nf=1 ad=0.9744 as=0.9744 pd=7.3 ps=7.3 nrd=0.08631 nrs=0.08631
+Xn_core z a down vss sky130_fd_pr__nfet_01v8 w=1.68 l=0.15 nf=1 ad=0.4872 as=0.4872 pd=3.94 ps=3.94 nrd=0.1726 nrs=0.1726
+Xn_starve down bn vss vss sky130_fd_pr__nfet_01v8 w=2.8 l=0.5 nf=1 ad=0.812 as=0.812 pd=6.18 ps=6.18 nrd=0.1036 nrs=0.1036
+.ends cpz4_starved_stage
+.subckt cpz4_tap_buffer a z vdd vss
+Xp_in mid a vdd vdd sky130_fd_pr__pfet_01v8 w=0.84 l=0.15 nf=1 ad=0.2436 as=0.2436 pd=2.26 ps=2.26 nrd=0.3452 nrs=0.3452
+Xn_in mid a vss vss sky130_fd_pr__nfet_01v8 w=0.42 l=0.15 nf=1 ad=0.1218 as=0.1218 pd=1.42 ps=1.42 nrd=0.6905 nrs=0.6905
+Xp_out z mid vdd vdd sky130_fd_pr__pfet_01v8 w=3.36 l=0.15 nf=1 ad=0.9744 as=0.9744 pd=7.3 ps=7.3 nrd=0.08631 nrs=0.08631
+Xn_out z mid vss vss sky130_fd_pr__nfet_01v8 w=1.68 l=0.15 nf=1 ad=0.4872 as=0.4872 pd=3.94 ps=3.94 nrd=0.1726 nrs=0.1726
+.ends cpz4_tap_buffer
+.subckt cpz4_dco vdd vss enable therm_0 therm_1 therm_2 therm_3 therm_4 therm_5 therm_6
++ therm_7 therm_8 therm_9 therm_10 therm_11 therm_12 therm_13 therm_14 therm_15 therm_16
++ therm_17 therm_18 therm_19 therm_20 therm_21 therm_22 therm_23 therm_24 therm_25 therm_26
++ therm_27 therm_28 therm_29 therm_30 therm_31 therm_32 therm_33 therm_34 therm_35 therm_36
++ therm_37 therm_38 therm_39 therm_40 therm_41 therm_42 therm_43 therm_44 therm_45 therm_46
++ therm_47 therm_48 therm_49 therm_50 therm_51 therm_52 therm_53 therm_54 therm_55 therm_56
++ therm_57 therm_58 therm_59 therm_60 therm_61 therm_62 therm_63 therm_64 therm_65 therm_66
++ therm_67 therm_68 therm_69 therm_70 therm_71 therm_72 therm_73 therm_74 therm_75 therm_76
++ therm_77 therm_78 therm_79 therm_80 therm_81 therm_82 therm_83 therm_84 therm_85 therm_86
++ therm_87 therm_88 therm_89 therm_90 therm_91 therm_92 therm_93 therm_94 therm_95 therm_96
++ therm_97 therm_98 therm_99 therm_100 therm_101 therm_102 therm_103 therm_104 therm_105 therm_106
++ therm_107 therm_108 therm_109 therm_110 therm_111 therm_112 therm_113 therm_114 therm_115 therm_116
++ therm_117 therm_118 therm_119 therm_120 therm_121 therm_122 therm_123 therm_124 therm_125 therm_126
++ therm_127 therm_128 therm_129 therm_130 therm_131 therm_132 therm_133 therm_134 therm_135 therm_136
++ therm_137 therm_138 therm_139 therm_140 therm_141 therm_142 therm_143 therm_144 therm_145 therm_146
++ therm_147 therm_148 therm_149 therm_150 therm_151 therm_152 therm_153 therm_154 therm_155 therm_156
++ therm_157 therm_158 therm_159 therm_160 therm_161 therm_162 therm_163 therm_164 therm_165 therm_166
++ therm_167 therm_168 therm_169 therm_170 therm_171 therm_172 therm_173 therm_174 therm_175 therm_176
++ therm_177 therm_178 therm_179 therm_180 therm_181 therm_182 therm_183 therm_184 therm_185 therm_186
++ therm_187 therm_188 therm_189 therm_190 therm_191 therm_192 therm_193 therm_194 therm_195 therm_196
++ therm_197 therm_198 therm_199 therm_200 therm_201 therm_202 therm_203 therm_204 therm_205 therm_206
++ therm_207 therm_208 therm_209 therm_210 therm_211 therm_212 therm_213 therm_214 therm_215 therm_216
++ therm_217 therm_218 therm_219 therm_220 therm_221 therm_222 therm_223 therm_224 therm_225 therm_226
++ therm_227 therm_228 therm_229 therm_230 therm_231 therm_232 therm_233 therm_234 therm_235 therm_236
++ therm_237 therm_238 therm_239 therm_240 therm_241 therm_242 therm_243 therm_244 therm_245 therm_246
++ therm_247 therm_248 therm_249 therm_250 therm_251 therm_252 therm_253 therm_254 tap_0 tap_1
++ tap_2 tap_3 tap_4
+* Turn off the reference and force both starve mirrors off in standby.
+Xp_eninv disable enable vdd vdd sky130_fd_pr__pfet_01v8 w=0.84 l=0.15 nf=1 ad=0.2436 as=0.2436 pd=2.26 ps=2.26 nrd=0.3452 nrs=0.3452
+Xn_eninv disable enable vss vss sky130_fd_pr__nfet_01v8 w=0.42 l=0.15 nf=1 ad=0.1218 as=0.1218 pd=1.42 ps=1.42 nrd=0.6905 nrs=0.6905
+Xreference_switch r_hi disable vdd vdd sky130_fd_pr__pfet_01v8 w=4.2 l=0.3 nf=1 ad=1.218 as=1.218 pd=8.98 ps=8.98 nrd=0.06905 nrs=0.06905
+Xr_ref r_hi vref vss sky130_fd_pr__res_xhigh_po_0p35 l=8.40
+Xreference vref vref vss vss sky130_fd_pr__nfet_01v8 w=4.2 l=0.5 nf=1 ad=1.218 as=1.218 pd=8.98 ps=8.98 nrd=0.06905 nrs=0.06905
+Xreference_off vref disable vss vss sky130_fd_pr__nfet_01v8 w=0.42 l=0.15 nf=1 ad=0.1218 as=0.1218 pd=1.42 ps=1.42 nrd=0.6905 nrs=0.6905
+Xbase bp vref vss vss sky130_fd_pr__nfet_01v8 w=3.36 l=1 nf=1 ad=0.9744 as=0.9744 pd=7.3 ps=7.3 nrd=0.08631 nrs=0.08631
+Xp_diode bp bp vdd vdd sky130_fd_pr__pfet_01v8 w=4.2 l=0.5 nf=1 ad=1.218 as=1.218 pd=8.98 ps=8.98 nrd=0.06905 nrs=0.06905
+Xp_replica bn bp vdd vdd sky130_fd_pr__pfet_01v8 w=4.2 l=0.5 nf=1 ad=1.218 as=1.218 pd=8.98 ps=8.98 nrd=0.06905 nrs=0.06905
+Xn_diode bn bn vss vss sky130_fd_pr__nfet_01v8 w=2.1 l=0.5 nf=1 ad=0.609 as=0.609 pd=4.78 ps=4.78 nrd=0.1381 nrs=0.1381
+Xp_off bp enable vdd vdd sky130_fd_pr__pfet_01v8 w=0.84 l=0.15 nf=1 ad=0.2436 as=0.2436 pd=2.26 ps=2.26 nrd=0.3452 nrs=0.3452
+Xn_off bn disable vss vss sky130_fd_pr__nfet_01v8 w=0.42 l=0.15 nf=1 ad=0.1218 as=0.1218 pd=1.42 ps=1.42 nrd=0.6905 nrs=0.6905
+Xseed n0 disable vss vss sky130_fd_pr__nfet_01v8 w=0.84 l=0.15 nf=1 ad=0.2436 as=0.2436 pd=2.26 ps=2.26 nrd=0.3452 nrs=0.3452
+* Tapered thermometer bank. The control flops sit at the macro boundary.
+Xu0 bp vref therm_0 vss cpz4_dac_unit_0
+Xu1 bp vref therm_1 vss cpz4_dac_unit_0
+Xu2 bp vref therm_2 vss cpz4_dac_unit_0
+Xu3 bp vref therm_3 vss cpz4_dac_unit_0
+Xu4 bp vref therm_4 vss cpz4_dac_unit_0
+Xu5 bp vref therm_5 vss cpz4_dac_unit_0
+Xu6 bp vref therm_6 vss cpz4_dac_unit_0
+Xu7 bp vref therm_7 vss cpz4_dac_unit_0
+Xu8 bp vref therm_8 vss cpz4_dac_unit_0
+Xu9 bp vref therm_9 vss cpz4_dac_unit_0
+Xu10 bp vref therm_10 vss cpz4_dac_unit_0
+Xu11 bp vref therm_11 vss cpz4_dac_unit_0
+Xu12 bp vref therm_12 vss cpz4_dac_unit_0
+Xu13 bp vref therm_13 vss cpz4_dac_unit_0
+Xu14 bp vref therm_14 vss cpz4_dac_unit_0
+Xu15 bp vref therm_15 vss cpz4_dac_unit_0
+Xu16 bp vref therm_16 vss cpz4_dac_unit_0
+Xu17 bp vref therm_17 vss cpz4_dac_unit_0
+Xu18 bp vref therm_18 vss cpz4_dac_unit_0
+Xu19 bp vref therm_19 vss cpz4_dac_unit_0
+Xu20 bp vref therm_20 vss cpz4_dac_unit_0
+Xu21 bp vref therm_21 vss cpz4_dac_unit_0
+Xu22 bp vref therm_22 vss cpz4_dac_unit_0
+Xu23 bp vref therm_23 vss cpz4_dac_unit_0
+Xu24 bp vref therm_24 vss cpz4_dac_unit_0
+Xu25 bp vref therm_25 vss cpz4_dac_unit_0
+Xu26 bp vref therm_26 vss cpz4_dac_unit_0
+Xu27 bp vref therm_27 vss cpz4_dac_unit_0
+Xu28 bp vref therm_28 vss cpz4_dac_unit_0
+Xu29 bp vref therm_29 vss cpz4_dac_unit_0
+Xu30 bp vref therm_30 vss cpz4_dac_unit_0
+Xu31 bp vref therm_31 vss cpz4_dac_unit_0
+Xu32 bp vref therm_32 vss cpz4_dac_unit_0
+Xu33 bp vref therm_33 vss cpz4_dac_unit_0
+Xu34 bp vref therm_34 vss cpz4_dac_unit_0
+Xu35 bp vref therm_35 vss cpz4_dac_unit_0
+Xu36 bp vref therm_36 vss cpz4_dac_unit_0
+Xu37 bp vref therm_37 vss cpz4_dac_unit_0
+Xu38 bp vref therm_38 vss cpz4_dac_unit_0
+Xu39 bp vref therm_39 vss cpz4_dac_unit_0
+Xu40 bp vref therm_40 vss cpz4_dac_unit_0
+Xu41 bp vref therm_41 vss cpz4_dac_unit_0
+Xu42 bp vref therm_42 vss cpz4_dac_unit_0
+Xu43 bp vref therm_43 vss cpz4_dac_unit_0
+Xu44 bp vref therm_44 vss cpz4_dac_unit_0
+Xu45 bp vref therm_45 vss cpz4_dac_unit_0
+Xu46 bp vref therm_46 vss cpz4_dac_unit_0
+Xu47 bp vref therm_47 vss cpz4_dac_unit_0
+Xu48 bp vref therm_48 vss cpz4_dac_unit_0
+Xu49 bp vref therm_49 vss cpz4_dac_unit_0
+Xu50 bp vref therm_50 vss cpz4_dac_unit_0
+Xu51 bp vref therm_51 vss cpz4_dac_unit_0
+Xu52 bp vref therm_52 vss cpz4_dac_unit_0
+Xu53 bp vref therm_53 vss cpz4_dac_unit_0
+Xu54 bp vref therm_54 vss cpz4_dac_unit_0
+Xu55 bp vref therm_55 vss cpz4_dac_unit_0
+Xu56 bp vref therm_56 vss cpz4_dac_unit_0
+Xu57 bp vref therm_57 vss cpz4_dac_unit_0
+Xu58 bp vref therm_58 vss cpz4_dac_unit_0
+Xu59 bp vref therm_59 vss cpz4_dac_unit_0
+Xu60 bp vref therm_60 vss cpz4_dac_unit_0
+Xu61 bp vref therm_61 vss cpz4_dac_unit_0
+Xu62 bp vref therm_62 vss cpz4_dac_unit_0
+Xu63 bp vref therm_63 vss cpz4_dac_unit_0
+Xu64 bp vref therm_64 vss cpz4_dac_unit_0
+Xu65 bp vref therm_65 vss cpz4_dac_unit_0
+Xu66 bp vref therm_66 vss cpz4_dac_unit_0
+Xu67 bp vref therm_67 vss cpz4_dac_unit_0
+Xu68 bp vref therm_68 vss cpz4_dac_unit_0
+Xu69 bp vref therm_69 vss cpz4_dac_unit_0
+Xu70 bp vref therm_70 vss cpz4_dac_unit_0
+Xu71 bp vref therm_71 vss cpz4_dac_unit_0
+Xu72 bp vref therm_72 vss cpz4_dac_unit_0
+Xu73 bp vref therm_73 vss cpz4_dac_unit_0
+Xu74 bp vref therm_74 vss cpz4_dac_unit_0
+Xu75 bp vref therm_75 vss cpz4_dac_unit_0
+Xu76 bp vref therm_76 vss cpz4_dac_unit_0
+Xu77 bp vref therm_77 vss cpz4_dac_unit_0
+Xu78 bp vref therm_78 vss cpz4_dac_unit_0
+Xu79 bp vref therm_79 vss cpz4_dac_unit_0
+Xu80 bp vref therm_80 vss cpz4_dac_unit_1
+Xu81 bp vref therm_81 vss cpz4_dac_unit_1
+Xu82 bp vref therm_82 vss cpz4_dac_unit_1
+Xu83 bp vref therm_83 vss cpz4_dac_unit_1
+Xu84 bp vref therm_84 vss cpz4_dac_unit_1
+Xu85 bp vref therm_85 vss cpz4_dac_unit_1
+Xu86 bp vref therm_86 vss cpz4_dac_unit_1
+Xu87 bp vref therm_87 vss cpz4_dac_unit_1
+Xu88 bp vref therm_88 vss cpz4_dac_unit_1
+Xu89 bp vref therm_89 vss cpz4_dac_unit_1
+Xu90 bp vref therm_90 vss cpz4_dac_unit_1
+Xu91 bp vref therm_91 vss cpz4_dac_unit_1
+Xu92 bp vref therm_92 vss cpz4_dac_unit_1
+Xu93 bp vref therm_93 vss cpz4_dac_unit_1
+Xu94 bp vref therm_94 vss cpz4_dac_unit_1
+Xu95 bp vref therm_95 vss cpz4_dac_unit_1
+Xu96 bp vref therm_96 vss cpz4_dac_unit_1
+Xu97 bp vref therm_97 vss cpz4_dac_unit_1
+Xu98 bp vref therm_98 vss cpz4_dac_unit_1
+Xu99 bp vref therm_99 vss cpz4_dac_unit_1
+Xu100 bp vref therm_100 vss cpz4_dac_unit_1
+Xu101 bp vref therm_101 vss cpz4_dac_unit_1
+Xu102 bp vref therm_102 vss cpz4_dac_unit_1
+Xu103 bp vref therm_103 vss cpz4_dac_unit_1
+Xu104 bp vref therm_104 vss cpz4_dac_unit_1
+Xu105 bp vref therm_105 vss cpz4_dac_unit_1
+Xu106 bp vref therm_106 vss cpz4_dac_unit_1
+Xu107 bp vref therm_107 vss cpz4_dac_unit_1
+Xu108 bp vref therm_108 vss cpz4_dac_unit_1
+Xu109 bp vref therm_109 vss cpz4_dac_unit_1
+Xu110 bp vref therm_110 vss cpz4_dac_unit_1
+Xu111 bp vref therm_111 vss cpz4_dac_unit_1
+Xu112 bp vref therm_112 vss cpz4_dac_unit_1
+Xu113 bp vref therm_113 vss cpz4_dac_unit_1
+Xu114 bp vref therm_114 vss cpz4_dac_unit_1
+Xu115 bp vref therm_115 vss cpz4_dac_unit_1
+Xu116 bp vref therm_116 vss cpz4_dac_unit_1
+Xu117 bp vref therm_117 vss cpz4_dac_unit_1
+Xu118 bp vref therm_118 vss cpz4_dac_unit_1
+Xu119 bp vref therm_119 vss cpz4_dac_unit_1
+Xu120 bp vref therm_120 vss cpz4_dac_unit_1
+Xu121 bp vref therm_121 vss cpz4_dac_unit_1
+Xu122 bp vref therm_122 vss cpz4_dac_unit_1
+Xu123 bp vref therm_123 vss cpz4_dac_unit_1
+Xu124 bp vref therm_124 vss cpz4_dac_unit_1
+Xu125 bp vref therm_125 vss cpz4_dac_unit_1
+Xu126 bp vref therm_126 vss cpz4_dac_unit_1
+Xu127 bp vref therm_127 vss cpz4_dac_unit_1
+Xu128 bp vref therm_128 vss cpz4_dac_unit_2
+Xu129 bp vref therm_129 vss cpz4_dac_unit_2
+Xu130 bp vref therm_130 vss cpz4_dac_unit_2
+Xu131 bp vref therm_131 vss cpz4_dac_unit_2
+Xu132 bp vref therm_132 vss cpz4_dac_unit_2
+Xu133 bp vref therm_133 vss cpz4_dac_unit_2
+Xu134 bp vref therm_134 vss cpz4_dac_unit_2
+Xu135 bp vref therm_135 vss cpz4_dac_unit_2
+Xu136 bp vref therm_136 vss cpz4_dac_unit_2
+Xu137 bp vref therm_137 vss cpz4_dac_unit_2
+Xu138 bp vref therm_138 vss cpz4_dac_unit_2
+Xu139 bp vref therm_139 vss cpz4_dac_unit_2
+Xu140 bp vref therm_140 vss cpz4_dac_unit_2
+Xu141 bp vref therm_141 vss cpz4_dac_unit_2
+Xu142 bp vref therm_142 vss cpz4_dac_unit_2
+Xu143 bp vref therm_143 vss cpz4_dac_unit_2
+Xu144 bp vref therm_144 vss cpz4_dac_unit_2
+Xu145 bp vref therm_145 vss cpz4_dac_unit_2
+Xu146 bp vref therm_146 vss cpz4_dac_unit_2
+Xu147 bp vref therm_147 vss cpz4_dac_unit_2
+Xu148 bp vref therm_148 vss cpz4_dac_unit_2
+Xu149 bp vref therm_149 vss cpz4_dac_unit_2
+Xu150 bp vref therm_150 vss cpz4_dac_unit_2
+Xu151 bp vref therm_151 vss cpz4_dac_unit_2
+Xu152 bp vref therm_152 vss cpz4_dac_unit_2
+Xu153 bp vref therm_153 vss cpz4_dac_unit_2
+Xu154 bp vref therm_154 vss cpz4_dac_unit_2
+Xu155 bp vref therm_155 vss cpz4_dac_unit_2
+Xu156 bp vref therm_156 vss cpz4_dac_unit_2
+Xu157 bp vref therm_157 vss cpz4_dac_unit_2
+Xu158 bp vref therm_158 vss cpz4_dac_unit_2
+Xu159 bp vref therm_159 vss cpz4_dac_unit_2
+Xu160 bp vref therm_160 vss cpz4_dac_unit_3
+Xu161 bp vref therm_161 vss cpz4_dac_unit_3
+Xu162 bp vref therm_162 vss cpz4_dac_unit_3
+Xu163 bp vref therm_163 vss cpz4_dac_unit_3
+Xu164 bp vref therm_164 vss cpz4_dac_unit_3
+Xu165 bp vref therm_165 vss cpz4_dac_unit_3
+Xu166 bp vref therm_166 vss cpz4_dac_unit_3
+Xu167 bp vref therm_167 vss cpz4_dac_unit_3
+Xu168 bp vref therm_168 vss cpz4_dac_unit_3
+Xu169 bp vref therm_169 vss cpz4_dac_unit_3
+Xu170 bp vref therm_170 vss cpz4_dac_unit_3
+Xu171 bp vref therm_171 vss cpz4_dac_unit_3
+Xu172 bp vref therm_172 vss cpz4_dac_unit_3
+Xu173 bp vref therm_173 vss cpz4_dac_unit_3
+Xu174 bp vref therm_174 vss cpz4_dac_unit_3
+Xu175 bp vref therm_175 vss cpz4_dac_unit_3
+Xu176 bp vref therm_176 vss cpz4_dac_unit_3
+Xu177 bp vref therm_177 vss cpz4_dac_unit_3
+Xu178 bp vref therm_178 vss cpz4_dac_unit_3
+Xu179 bp vref therm_179 vss cpz4_dac_unit_3
+Xu180 bp vref therm_180 vss cpz4_dac_unit_3
+Xu181 bp vref therm_181 vss cpz4_dac_unit_3
+Xu182 bp vref therm_182 vss cpz4_dac_unit_3
+Xu183 bp vref therm_183 vss cpz4_dac_unit_3
+Xu184 bp vref therm_184 vss cpz4_dac_unit_3
+Xu185 bp vref therm_185 vss cpz4_dac_unit_3
+Xu186 bp vref therm_186 vss cpz4_dac_unit_3
+Xu187 bp vref therm_187 vss cpz4_dac_unit_3
+Xu188 bp vref therm_188 vss cpz4_dac_unit_3
+Xu189 bp vref therm_189 vss cpz4_dac_unit_3
+Xu190 bp vref therm_190 vss cpz4_dac_unit_3
+Xu191 bp vref therm_191 vss cpz4_dac_unit_3
+Xu192 bp vref therm_192 vss cpz4_dac_unit_4
+Xu193 bp vref therm_193 vss cpz4_dac_unit_4
+Xu194 bp vref therm_194 vss cpz4_dac_unit_4
+Xu195 bp vref therm_195 vss cpz4_dac_unit_4
+Xu196 bp vref therm_196 vss cpz4_dac_unit_4
+Xu197 bp vref therm_197 vss cpz4_dac_unit_4
+Xu198 bp vref therm_198 vss cpz4_dac_unit_4
+Xu199 bp vref therm_199 vss cpz4_dac_unit_4
+Xu200 bp vref therm_200 vss cpz4_dac_unit_4
+Xu201 bp vref therm_201 vss cpz4_dac_unit_4
+Xu202 bp vref therm_202 vss cpz4_dac_unit_4
+Xu203 bp vref therm_203 vss cpz4_dac_unit_4
+Xu204 bp vref therm_204 vss cpz4_dac_unit_4
+Xu205 bp vref therm_205 vss cpz4_dac_unit_4
+Xu206 bp vref therm_206 vss cpz4_dac_unit_4
+Xu207 bp vref therm_207 vss cpz4_dac_unit_4
+Xu208 bp vref therm_208 vss cpz4_dac_unit_4
+Xu209 bp vref therm_209 vss cpz4_dac_unit_4
+Xu210 bp vref therm_210 vss cpz4_dac_unit_4
+Xu211 bp vref therm_211 vss cpz4_dac_unit_4
+Xu212 bp vref therm_212 vss cpz4_dac_unit_4
+Xu213 bp vref therm_213 vss cpz4_dac_unit_4
+Xu214 bp vref therm_214 vss cpz4_dac_unit_4
+Xu215 bp vref therm_215 vss cpz4_dac_unit_4
+Xu216 bp vref therm_216 vss cpz4_dac_unit_4
+Xu217 bp vref therm_217 vss cpz4_dac_unit_4
+Xu218 bp vref therm_218 vss cpz4_dac_unit_4
+Xu219 bp vref therm_219 vss cpz4_dac_unit_4
+Xu220 bp vref therm_220 vss cpz4_dac_unit_4
+Xu221 bp vref therm_221 vss cpz4_dac_unit_4
+Xu222 bp vref therm_222 vss cpz4_dac_unit_4
+Xu223 bp vref therm_223 vss cpz4_dac_unit_4
+Xu224 bp vref therm_224 vss cpz4_dac_unit_5
+Xu225 bp vref therm_225 vss cpz4_dac_unit_5
+Xu226 bp vref therm_226 vss cpz4_dac_unit_5
+Xu227 bp vref therm_227 vss cpz4_dac_unit_5
+Xu228 bp vref therm_228 vss cpz4_dac_unit_5
+Xu229 bp vref therm_229 vss cpz4_dac_unit_5
+Xu230 bp vref therm_230 vss cpz4_dac_unit_5
+Xu231 bp vref therm_231 vss cpz4_dac_unit_5
+Xu232 bp vref therm_232 vss cpz4_dac_unit_5
+Xu233 bp vref therm_233 vss cpz4_dac_unit_5
+Xu234 bp vref therm_234 vss cpz4_dac_unit_5
+Xu235 bp vref therm_235 vss cpz4_dac_unit_5
+Xu236 bp vref therm_236 vss cpz4_dac_unit_5
+Xu237 bp vref therm_237 vss cpz4_dac_unit_5
+Xu238 bp vref therm_238 vss cpz4_dac_unit_5
+Xu239 bp vref therm_239 vss cpz4_dac_unit_5
+Xu240 bp vref therm_240 vss cpz4_dac_unit_6
+Xu241 bp vref therm_241 vss cpz4_dac_unit_6
+Xu242 bp vref therm_242 vss cpz4_dac_unit_6
+Xu243 bp vref therm_243 vss cpz4_dac_unit_6
+Xu244 bp vref therm_244 vss cpz4_dac_unit_6
+Xu245 bp vref therm_245 vss cpz4_dac_unit_6
+Xu246 bp vref therm_246 vss cpz4_dac_unit_6
+Xu247 bp vref therm_247 vss cpz4_dac_unit_6
+Xu248 bp vref therm_248 vss cpz4_dac_unit_6
+Xu249 bp vref therm_249 vss cpz4_dac_unit_6
+Xu250 bp vref therm_250 vss cpz4_dac_unit_6
+Xu251 bp vref therm_251 vss cpz4_dac_unit_6
+Xu252 bp vref therm_252 vss cpz4_dac_unit_6
+Xu253 bp vref therm_253 vss cpz4_dac_unit_6
+Xu254 bp vref therm_254 vss cpz4_dac_unit_6
+Xs0 n4 n0 bp bn vdd vss cpz4_starved_stage
+Xload0 n0 vss sky130_fd_pr__cap_mim_m3_1 w=2.2 l=2.2
+Xb0 n0 tap_0 vdd vss cpz4_tap_buffer
+Xs1 n0 n1 bp bn vdd vss cpz4_starved_stage
+Xload1 n1 vss sky130_fd_pr__cap_mim_m3_1 w=2.2 l=2.2
+Xb1 n1 tap_1 vdd vss cpz4_tap_buffer
+Xs2 n1 n2 bp bn vdd vss cpz4_starved_stage
+Xload2 n2 vss sky130_fd_pr__cap_mim_m3_1 w=2.2 l=2.2
+Xb2 n2 tap_2 vdd vss cpz4_tap_buffer
+Xs3 n2 n3 bp bn vdd vss cpz4_starved_stage
+Xload3 n3 vss sky130_fd_pr__cap_mim_m3_1 w=2.2 l=2.2
+Xb3 n3 tap_3 vdd vss cpz4_tap_buffer
+Xs4 n3 n4 bp bn vdd vss cpz4_starved_stage
+Xload4 n4 vss sky130_fd_pr__cap_mim_m3_1 w=2.2 l=2.2
+Xb4 n4 tap_4 vdd vss cpz4_tap_buffer
+.ends cpz4_dco
+.subckt cpz4_dac_unit_0 bp bias select vss
+Xunit bp bias src vss sky130_fd_pr__nfet_01v8 w=0.42 l=4 nf=1 ad=0.1218 as=0.1218 pd=1.42 ps=1.42 nrd=0.6905 nrs=0.6905
+Xswitch src select vss vss sky130_fd_pr__nfet_01v8 w=1.68 l=0.15 nf=1 ad=0.4872 as=0.4872 pd=3.94 ps=3.94 nrd=0.1726 nrs=0.1726
+.ends cpz4_dac_unit_0
+.subckt cpz4_dac_unit_1 bp bias select vss
+Xunit bp bias src vss sky130_fd_pr__nfet_01v8 w=0.42 l=2.7 nf=1 ad=0.1218 as=0.1218 pd=1.42 ps=1.42 nrd=0.6905 nrs=0.6905
+Xswitch src select vss vss sky130_fd_pr__nfet_01v8 w=1.68 l=0.15 nf=1 ad=0.4872 as=0.4872 pd=3.94 ps=3.94 nrd=0.1726 nrs=0.1726
+.ends cpz4_dac_unit_1
+.subckt cpz4_dac_unit_2 bp bias select vss
+Xunit bp bias src vss sky130_fd_pr__nfet_01v8 w=0.42 l=1.6 nf=1 ad=0.1218 as=0.1218 pd=1.42 ps=1.42 nrd=0.6905 nrs=0.6905
+Xswitch src select vss vss sky130_fd_pr__nfet_01v8 w=1.68 l=0.15 nf=1 ad=0.4872 as=0.4872 pd=3.94 ps=3.94 nrd=0.1726 nrs=0.1726
+.ends cpz4_dac_unit_2
+.subckt cpz4_dac_unit_3 bp bias select vss
+Xunit bp bias src vss sky130_fd_pr__nfet_01v8 w=0.42 l=1 nf=1 ad=0.1218 as=0.1218 pd=1.42 ps=1.42 nrd=0.6905 nrs=0.6905
+Xswitch src select vss vss sky130_fd_pr__nfet_01v8 w=1.68 l=0.15 nf=1 ad=0.4872 as=0.4872 pd=3.94 ps=3.94 nrd=0.1726 nrs=0.1726
+.ends cpz4_dac_unit_3
+.subckt cpz4_dac_unit_4 bp bias select vss
+Xunit bp bias src vss sky130_fd_pr__nfet_01v8 w=0.7 l=1 nf=1 ad=0.203 as=0.203 pd=1.98 ps=1.98 nrd=0.4143 nrs=0.4143
+Xswitch src select vss vss sky130_fd_pr__nfet_01v8 w=1.68 l=0.15 nf=1 ad=0.4872 as=0.4872 pd=3.94 ps=3.94 nrd=0.1726 nrs=0.1726
+.ends cpz4_dac_unit_4
+.subckt cpz4_dac_unit_5 bp bias select vss
+Xunit bp bias src vss sky130_fd_pr__nfet_01v8 w=1.05 l=1 nf=1 ad=0.3045 as=0.3045 pd=2.68 ps=2.68 nrd=0.2762 nrs=0.2762
+Xswitch src select vss vss sky130_fd_pr__nfet_01v8 w=2.1 l=0.15 nf=1 ad=0.609 as=0.609 pd=4.78 ps=4.78 nrd=0.1381 nrs=0.1381
+.ends cpz4_dac_unit_5
+.subckt cpz4_dac_unit_6 bp bias select vss
+Xunit bp bias src vss sky130_fd_pr__nfet_01v8 w=1.89 l=1 nf=1 ad=0.5481 as=0.5481 pd=4.36 ps=4.36 nrd=0.1534 nrs=0.1534
+Xswitch src select vss vss sky130_fd_pr__nfet_01v8 w=3.78 l=0.15 nf=1 ad=1.096 as=1.096 pd=8.14 ps=8.14 nrd=0.07672 nrs=0.07672
+.ends cpz4_dac_unit_6

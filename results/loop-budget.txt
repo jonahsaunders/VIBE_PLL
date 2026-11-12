@@ -1,0 +1,10 @@
+acquire gain_ratio=0.75 a=0.046875 b=0.0014648 unity_hz=2.1741e+05 phase_margin_deg=49.664 noise_bw_hz=6.1287e+05 tdc_rms_ps=24.945 max_pole_radius=0.97498
+acquire gain_ratio=1 a=0.0625 b=0.0019531 unity_hz=2.7629e+05 phase_margin_deg=52.185 noise_bw_hz=7.769e+05 tdc_rms_ps=28.085 max_pole_radius=0.96415
+acquire gain_ratio=1.5 a=0.09375 b=0.0029297 unity_hz=3.9662e+05 phase_margin_deg=52.87 noise_bw_hz=1.1642e+06 tdc_rms_ps=34.38 max_pole_radius=0.93404
+acquire gain_ratio=2 a=0.125 b=0.0039062 unity_hz=5.1931e+05 phase_margin_deg=50.58 noise_bw_hz=1.6495e+06 tdc_rms_ps=40.923 max_pole_radius=0.95727
+acquire gain_ratio=2.5 a=0.15625 b=0.0048828 unity_hz=6.4339e+05 phase_margin_deg=46.822 noise_bw_hz=2.2653e+06 tdc_rms_ps=47.957 max_pole_radius=0.96153
+track gain_ratio=0.75 a=0.023438 b=0.00036621 unity_hz=1.0819e+05 phase_margin_deg=54.858 noise_bw_hz=2.7232e+05 tdc_rms_ps=16.628 max_pole_radius=0.98791
+track gain_ratio=1 a=0.03125 b=0.00048828 unity_hz=1.3737e+05 phase_margin_deg=58.896 noise_bw_hz=3.3534e+05 tdc_rms_ps=18.452 max_pole_radius=0.9834
+track gain_ratio=1.5 a=0.046875 b=0.00073242 unity_hz=1.9698e+05 phase_margin_deg=62.687 noise_bw_hz=4.7195e+05 tdc_rms_ps=21.89 max_pole_radius=0.97339
+track gain_ratio=2 a=0.0625 b=0.00097656 unity_hz=2.5774e+05 phase_margin_deg=63.554 noise_bw_hz=6.2394e+05 tdc_rms_ps=25.169 max_pole_radius=0.97654
+track gain_ratio=2.5 a=0.078125 b=0.0012207 unity_hz=3.1916e+05 phase_margin_deg=62.981 noise_bw_hz=7.9306e+05 tdc_rms_ps=28.376 max_pole_radius=0.97976

@@ -1,0 +1,76 @@
+TT 1.80 V, 25 C, 25 MHz reference
+CASE spice_interpolated
+LOCK fractional_default us=25.720 gain_q12=418 code=58 peak_MHz=269.52
+FREQ target_MHz=256.2500000 measured_MHz=256.2494472 error_ppm=-2.16
+LOCK integer_retune us=26.121 gain_q12=422 code=76 peak_MHz=310.91
+FREQ target_MHz=300.0000000 measured_MHz=300.0002338 error_ppm=+0.78
+WATCHDOG us=0.841 monitor_edges=64
+LOCK reference_return us=26.076 gain_q12=426 code=76 peak_MHz=310.91
+LOCK invalid_sample_recovery us=25.720 gain_q12=422 code=76 peak_MHz=310.91
+PASS ref=25.0 MHz modeled range=87.9..678.8 MHz
+
+SS 1.62 V, 0 C, 16 MHz reference
+CASE spice_interpolated
+LOCK fractional_default us=39.688 gain_q12=363 code=58 peak_MHz=172.93
+FREQ target_MHz=164.0000000 measured_MHz=164.0004369 error_ppm=+2.66
+LOCK integer_retune us=43.007 gain_q12=360 code=78 peak_MHz=195.49
+FREQ target_MHz=192.0000000 measured_MHz=191.9992740 error_ppm=-3.78
+WATCHDOG us=1.318 monitor_edges=64
+LOCK reference_return us=42.973 gain_q12=360 code=78 peak_MHz=195.49
+LOCK invalid_sample_recovery us=42.562 gain_q12=360 code=78 peak_MHz=195.49
+LOCK range_endpoint us=58.812 gain_q12=170 code=178 peak_MHz=309.57
+FREQ target_MHz=300.0000000 measured_MHz=299.9994112 error_ppm=-1.96
+HIGH_RAIL_REJECTED
+PASS ref=16.0 MHz modeled range=71.0..346.4 MHz
+
+SS 1.62 V, 85 C, 16 MHz reference
+CASE spice_interpolated
+LOCK fractional_default us=37.125 gain_q12=469 code=46 peak_MHz=168.31
+FREQ target_MHz=164.0000000 measured_MHz=163.9987062 error_ppm=-7.89
+LOCK integer_retune us=38.261 gain_q12=469 code=61 peak_MHz=197.59
+FREQ target_MHz=192.0000000 measured_MHz=191.9979367 error_ppm=-10.75
+WATCHDOG us=1.314 monitor_edges=64
+LOCK reference_return us=38.161 gain_q12=469 code=61 peak_MHz=197.59
+LOCK invalid_sample_recovery us=37.625 gain_q12=467 code=61 peak_MHz=197.59
+LOCK range_endpoint us=51.125 gain_q12=306 code=135 peak_MHz=310.40
+FREQ target_MHz=300.0000000 measured_MHz=300.0017547 error_ppm=+5.85
+HIGH_RAIL_REJECTED
+LOW_RAIL_REJECTED
+PASS ref=16.0 MHz modeled range=80.5..387.3 MHz
+
+FF 1.95 V, 0 C, 32 MHz reference
+CASE spice_interpolated
+LOCK fractional_default us=19.406 gain_q12=507 code=50 peak_MHz=348.37
+FREQ target_MHz=296.0000000 measured_MHz=296.0008397 error_ppm=+2.84
+LOCK integer_retune us=19.155 gain_q12=514 code=48 peak_MHz=348.37
+FREQ target_MHz=288.0000000 measured_MHz=287.9950203 error_ppm=-17.29
+WATCHDOG us=0.884 monitor_edges=64
+LOCK reference_return us=19.082 gain_q12=514 code=48 peak_MHz=348.37
+LOCK invalid_sample_recovery us=18.812 gain_q12=514 code=48 peak_MHz=348.37
+LOCK range_endpoint us=14.875 gain_q12=550 code=17 peak_MHz=291.48
+FREQ target_MHz=160.0000000 measured_MHz=160.0030492 error_ppm=+19.06
+PASS ref=32.0 MHz modeled range=87.6..1096.9 MHz
+
+SF 1.62 V, 85 C, 25 MHz reference
+CASE spice_interpolated
+LOCK fractional_default us=25.560 gain_q12=483 code=58 peak_MHz=272.67
+FREQ target_MHz=256.2500000 measured_MHz=256.2518165 error_ppm=+7.09
+LOCK integer_retune us=29.241 gain_q12=275 code=80 peak_MHz=325.90
+FREQ target_MHz=300.0000000 measured_MHz=299.9970189 error_ppm=-9.94
+WATCHDOG us=0.844 monitor_edges=64
+LOCK reference_return us=29.197 gain_q12=272 code=80 peak_MHz=325.90
+LOCK invalid_sample_recovery us=28.840 gain_q12=272 code=81 peak_MHz=325.90
+HIGH_RAIL_REJECTED
+PASS ref=25.0 MHz modeled range=83.4..446.0 MHz
+
+FS 1.62 V, 85 C, 25 MHz reference
+CASE spice_interpolated
+LOCK fractional_default us=26.000 gain_q12=338 code=79 peak_MHz=256.69
+FREQ target_MHz=256.2500000 measured_MHz=256.2469159 error_ppm=-12.04
+LOCK integer_retune us=29.409 gain_q12=339 code=102 peak_MHz=322.78
+FREQ target_MHz=300.0000000 measured_MHz=300.0043804 error_ppm=+14.60
+WATCHDOG us=0.840 monitor_edges=64
+LOCK reference_return us=29.343 gain_q12=338 code=101 peak_MHz=322.78
+LOCK invalid_sample_recovery us=29.000 gain_q12=338 code=101 peak_MHz=322.78
+HIGH_RAIL_REJECTED
+PASS ref=25.0 MHz modeled range=81.5..574.7 MHz

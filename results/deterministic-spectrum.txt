@@ -1,0 +1,5 @@
+25 MHz reference, Q5.12 ratio 41984
+clock_mhz=256.25 rms_tie_ps=86.1093 offset_hz=-2.86021e+06 strongest_line_dbc=-34.4999 resolution_hz=1955.03
+
+25 MHz reference, Q5.12 ratio 40961
+clock_mhz=250.006 rms_tie_ps=111.258 offset_hz=-2.10195e+06 strongest_line_dbc=-21.3677 resolution_hz=1907.4
