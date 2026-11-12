@@ -18,8 +18,8 @@ def open_loop(normalized_frequency, a, b):
     return q**4 * (a + b / (1 - q)) / (1 - q)
 
 
-def budget(mode, gain_ratio, reference_hz, output_hz):
-    p_shift, i_shift = {"acquire": (4, 9), "track": (5, 11)}[mode]
+def budget(mode, gain_ratio, reference_hz, output_hz, bins=40, tracking_gear=2):
+    p_shift, i_shift = (4, 9) if mode == "acquire" else (5 + tracking_gear, 11 + 2 * tracking_gear)
     a = gain_ratio / (2**p_shift)
     b = gain_ratio / (2**i_shift)
     f = np.linspace(1e-7, 0.5, 40001)
@@ -31,7 +31,7 @@ def budget(mode, gain_ratio, reference_hz, output_hz):
     unity = f[cross - 1] + frac * (f[cross] - f[cross - 1])
     phase_at_unity = phase[cross - 1] + frac * (phase[cross] - phase[cross - 1])
     noise_bw = reference_hz * np.trapezoid(abs(loop / (1 + loop))**2, f)
-    rms = 1 / (10 * output_hz * math.sqrt(12)) * math.sqrt(2 * noise_bw / reference_hz)
+    rms = 1 / (bins * output_hz * math.sqrt(12)) * math.sqrt(2 * noise_bw / reference_hz)
     poles = np.roots([1, -2, 1, 0, a + b, -a])
     return {
         "a": a, "b": b, "unity_hz": unity * reference_hz,
@@ -45,10 +45,12 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--ref", type=float, default=25e6)
     parser.add_argument("--out", type=float, default=256.25e6)
+    parser.add_argument("--bins", type=int, choices=(10, 40), default=40)
+    parser.add_argument("--tracking-gear", type=int, choices=(0, 1, 2), default=2)
     args = parser.parse_args()
     for mode in ("acquire", "track"):
         for gain_ratio in (0.75, 1.0, 1.5, 2.0, 2.5):
-            data = budget(mode, gain_ratio, args.ref, args.out)
+            data = budget(mode, gain_ratio, args.ref, args.out, args.bins, args.tracking_gear)
             metrics = " ".join(f"{key}={value:.5g}" for key, value in data.items())
             print(f"{mode} gain_ratio={gain_ratio:g} {metrics}")
 

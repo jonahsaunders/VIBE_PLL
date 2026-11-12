@@ -25,9 +25,16 @@ def estimate(times, lower_hz, upper_hz):
     if not len(candidate):
         raise ValueError("No FFT bin is inside the requested offset range")
     peak = candidate[np.argmax(spectrum[candidate])]
+    positive_offsets = np.fft.rfftfreq(len(times), period)
+    positive_band = (positive_offsets >= lower_hz) & (positive_offsets <= upper_hz)
+    timing_power = 2 * abs(np.fft.rfft(window * tie))**2 / (len(times) * np.sum(window**2))
+    timing_power[0] *= 0.5
+    if len(times) % 2 == 0:
+        timing_power[-1] *= 0.5
     return {
         "clock_mhz": clock_hz / 1e6,
         "rms_tie_ps": np.std(tie) * 1e12,
+        "band_tie_ps": np.sqrt(timing_power[positive_band].sum()) * 1e12,
         "offset_hz": offsets[peak],
         "strongest_line_dbc": 20 * np.log10(spectrum[peak] / spectrum[0]),
         "resolution_hz": clock_hz / len(times),

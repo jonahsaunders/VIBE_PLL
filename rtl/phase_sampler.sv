@@ -21,23 +21,33 @@ module cpz4_edge_counter #(
     output reg  [11:0] binary,
     output reg  [11:0] gray
 );
-    reg carry4, carry8;
-    wire [11:0] next_count = {binary[11:8] + {3'b0, carry8},
-                              binary[7:4]  + {3'b0, carry4},
-                              binary[3:0]  + 4'd1};
+    localparam [11:0] NEXT_SEED = SEED + 12'd1;
+    reg [11:0] next_binary;
+    reg low_carry, middle_prefix, high_prefix;
+    wire middle_carry = low_carry && middle_prefix;
+    wire high_carry = low_carry && high_prefix;
 
-    // Predict carry a cycle early to keep the 400 MHz increment paths short.
+    // Compute the next count in short groups and register its Gray code
+    // on the following edge. When the low group is six, the upper groups
+    // are already stable for the carry needed at seven.
     always @(posedge clk or negedge reset_n) begin
         if (!reset_n) begin
             binary <= SEED;
-            gray   <= SEED ^ (SEED >> 1);
-            carry4 <= &SEED[3:0];
-            carry8 <= &SEED[7:0];
+            gray <= SEED ^ (SEED >> 1);
+            next_binary <= NEXT_SEED;
+            low_carry <= &NEXT_SEED[2:0];
+            middle_prefix <= &NEXT_SEED[5:3];
+            high_prefix <= &NEXT_SEED[8:3];
         end else begin
-            binary <= next_count;
-            gray   <= next_count ^ (next_count >> 1);
-            carry4 <= binary[3:0] == 4'he;
-            carry8 <= binary[7:0] == 8'hfe;
+            binary <= next_binary;
+            gray <= next_binary ^ (next_binary >> 1);
+            next_binary[2:0] <= next_binary[2:0] + 3'd1;
+            next_binary[5:3] <= next_binary[5:3] + {2'b0, low_carry};
+            next_binary[8:6] <= next_binary[8:6] + {2'b0, middle_carry};
+            next_binary[11:9] <= next_binary[11:9] + {2'b0, high_carry};
+            low_carry <= next_binary[2:0] == 3'd6;
+            middle_prefix <= &next_binary[5:3];
+            high_prefix <= &next_binary[8:3];
         end
     end
 endmodule
@@ -46,10 +56,13 @@ module cpz4_phase_sampler (
     input  wire        ref_clk,
     input  wire        ref_reset_n,
     input  wire [4:0]  tap,
+    input  wire [14:0] fine_tap,
     input  wire        dco_reset_n,
     output wire        dco_div2,
     output wire        dco_div4,
     output reg  [3:0]  bin_index,
+    output wire [5:0]  fine_bin,
+    output wire        fine_valid,
     output wire        valid,
     output wire [11:0] cycle_count
 );
@@ -65,6 +78,7 @@ module cpz4_phase_sampler (
     (* ASYNC_REG = "TRUE" *) reg [11:0] pos_meta, pos_sample;
     (* ASYNC_REG = "TRUE" *) reg [11:0] neg_meta, neg_sample;
     (* ASYNC_REG = "TRUE" *) reg [4:0] tap_meta, tap_sample;
+    (* ASYNC_REG = "TRUE" *) reg [14:0] fine_meta, fine_sample;
     (* ASYNC_REG = "TRUE" *) reg [1:0] ready_pipe;
 
     always @(posedge ref_clk or negedge ref_reset_n) begin
@@ -75,6 +89,8 @@ module cpz4_phase_sampler (
             neg_sample <= 0;
             tap_meta   <= 0;
             tap_sample <= 0;
+            fine_meta  <= 0;
+            fine_sample <= 0;
             ready_pipe <= 0;
         end else begin
             pos_meta   <= pos_gray;
@@ -83,6 +99,8 @@ module cpz4_phase_sampler (
             neg_sample <= neg_meta;
             tap_meta   <= tap;
             tap_sample <= tap_meta;
+            fine_meta  <= fine_tap;
+            fine_sample <= fine_meta;
             ready_pipe <= {ready_pipe[0], dco_reset_n};
         end
     end
@@ -120,6 +138,30 @@ module cpz4_phase_sampler (
     assign cycle_count = bin_index <= 4'd2 ? falling_count + 12'd1 :
                          bin_index <= 4'd6 ? gray_to_binary(pos_sample) : falling_count;
     assign valid = ready_pipe[1] && legal_word;
+
+    // Only the three delay replicas of the most recent coarse edge matter.
+    // The replica chain inverts at stages 1 and 3. After restoring polarity,
+    // the matches must appear in order from the nearest to the farthest tap.
+    wire [2:0] active_tap = 3'(bin_index < 4'd5 ? bin_index : bin_index - 4'd5);
+    wire [2:0] replicas = fine_sample[3 * active_tap +: 3] ^ 3'b101;
+    wire [2:0] thermometer = ~(replicas ^ {3{tap_sample[active_tap]}});
+    reg [1:0] subdivision;
+    reg legal_fine;
+    always @* begin
+        legal_fine = 1'b1;
+        case (thermometer)
+            3'b000: subdivision = 2'd0;
+            3'b001: subdivision = 2'd1;
+            3'b011: subdivision = 2'd2;
+            3'b111: subdivision = 2'd3;
+            default: begin
+                subdivision = 2'd0;
+                legal_fine = 1'b0;
+            end
+        endcase
+    end
+    assign fine_bin = {bin_index, subdivision};
+    assign fine_valid = valid && legal_fine;
 endmodule
 
 module cpz4_ref_watchdog (

@@ -1,12 +1,16 @@
 * SPDX-License-Identifier: Apache-2.0
 * CPZ4 DCO. Geometry is in microns under the Sky130 SPICE library scale.
-* DCO pin order: vdd vss enable, therm_0..254, tap_0..4.
+* Pins: vdd vss enable, therm_0..254, fine_therm_0..127, tap_0..4, fine_tap_0..14.
 .subckt cpz4_starved_stage a z bp bn vdd vss
 Xp_starve up bp vdd vdd sky130_fd_pr__pfet_01v8 w=5.6 l=0.5 nf=1 ad=1.624 as=1.624 pd=11.78 ps=11.78 nrd=0.05179 nrs=0.05179
 Xp_core z a up vdd sky130_fd_pr__pfet_01v8 w=3.36 l=0.15 nf=1 ad=0.9744 as=0.9744 pd=7.3 ps=7.3 nrd=0.08631 nrs=0.08631
 Xn_core z a down vss sky130_fd_pr__nfet_01v8 w=1.68 l=0.15 nf=1 ad=0.4872 as=0.4872 pd=3.94 ps=3.94 nrd=0.1726 nrs=0.1726
 Xn_starve down bn vss vss sky130_fd_pr__nfet_01v8 w=2.8 l=0.5 nf=1 ad=0.812 as=0.812 pd=6.18 ps=6.18 nrd=0.1036 nrs=0.1036
 .ends cpz4_starved_stage
+.subckt cpz4_fine_delay a z vdd vss
+Xp_delay z a vdd vdd sky130_fd_pr__pfet_01v8 w=1.68 l=0.15 nf=1 ad=0.4872 as=0.4872 pd=3.94 ps=3.94 nrd=0.1726 nrs=0.1726
+Xn_delay z a vss vss sky130_fd_pr__nfet_01v8 w=0.84 l=0.15 nf=1 ad=0.2436 as=0.2436 pd=2.26 ps=2.26 nrd=0.3452 nrs=0.3452
+.ends cpz4_fine_delay
 .subckt cpz4_tap_buffer a z vdd vss
 Xp_in mid a vdd vdd sky130_fd_pr__pfet_01v8 w=0.84 l=0.15 nf=1 ad=0.2436 as=0.2436 pd=2.26 ps=2.26 nrd=0.3452 nrs=0.3452
 Xn_in mid a vss vss sky130_fd_pr__nfet_01v8 w=0.42 l=0.15 nf=1 ad=0.1218 as=0.1218 pd=1.42 ps=1.42 nrd=0.6905 nrs=0.6905
@@ -38,8 +42,22 @@ Xn_out z mid vss vss sky130_fd_pr__nfet_01v8 w=1.68 l=0.15 nf=1 ad=0.4872 as=0.4
 + therm_217 therm_218 therm_219 therm_220 therm_221 therm_222 therm_223 therm_224 therm_225 therm_226
 + therm_227 therm_228 therm_229 therm_230 therm_231 therm_232 therm_233 therm_234 therm_235 therm_236
 + therm_237 therm_238 therm_239 therm_240 therm_241 therm_242 therm_243 therm_244 therm_245 therm_246
-+ therm_247 therm_248 therm_249 therm_250 therm_251 therm_252 therm_253 therm_254 tap_0 tap_1
-+ tap_2 tap_3 tap_4
++ therm_247 therm_248 therm_249 therm_250 therm_251 therm_252 therm_253 therm_254 fine_therm_0 fine_therm_1
++ fine_therm_2 fine_therm_3 fine_therm_4 fine_therm_5 fine_therm_6 fine_therm_7 fine_therm_8 fine_therm_9 fine_therm_10 fine_therm_11
++ fine_therm_12 fine_therm_13 fine_therm_14 fine_therm_15 fine_therm_16 fine_therm_17 fine_therm_18 fine_therm_19 fine_therm_20 fine_therm_21
++ fine_therm_22 fine_therm_23 fine_therm_24 fine_therm_25 fine_therm_26 fine_therm_27 fine_therm_28 fine_therm_29 fine_therm_30 fine_therm_31
++ fine_therm_32 fine_therm_33 fine_therm_34 fine_therm_35 fine_therm_36 fine_therm_37 fine_therm_38 fine_therm_39 fine_therm_40 fine_therm_41
++ fine_therm_42 fine_therm_43 fine_therm_44 fine_therm_45 fine_therm_46 fine_therm_47 fine_therm_48 fine_therm_49 fine_therm_50 fine_therm_51
++ fine_therm_52 fine_therm_53 fine_therm_54 fine_therm_55 fine_therm_56 fine_therm_57 fine_therm_58 fine_therm_59 fine_therm_60 fine_therm_61
++ fine_therm_62 fine_therm_63 fine_therm_64 fine_therm_65 fine_therm_66 fine_therm_67 fine_therm_68 fine_therm_69 fine_therm_70 fine_therm_71
++ fine_therm_72 fine_therm_73 fine_therm_74 fine_therm_75 fine_therm_76 fine_therm_77 fine_therm_78 fine_therm_79 fine_therm_80 fine_therm_81
++ fine_therm_82 fine_therm_83 fine_therm_84 fine_therm_85 fine_therm_86 fine_therm_87 fine_therm_88 fine_therm_89 fine_therm_90 fine_therm_91
++ fine_therm_92 fine_therm_93 fine_therm_94 fine_therm_95 fine_therm_96 fine_therm_97 fine_therm_98 fine_therm_99 fine_therm_100 fine_therm_101
++ fine_therm_102 fine_therm_103 fine_therm_104 fine_therm_105 fine_therm_106 fine_therm_107 fine_therm_108 fine_therm_109 fine_therm_110 fine_therm_111
++ fine_therm_112 fine_therm_113 fine_therm_114 fine_therm_115 fine_therm_116 fine_therm_117 fine_therm_118 fine_therm_119 fine_therm_120 fine_therm_121
++ fine_therm_122 fine_therm_123 fine_therm_124 fine_therm_125 fine_therm_126 fine_therm_127 tap_0 tap_1 tap_2 tap_3
++ tap_4 fine_tap_0 fine_tap_1 fine_tap_2 fine_tap_3 fine_tap_4 fine_tap_5 fine_tap_6 fine_tap_7 fine_tap_8
++ fine_tap_9 fine_tap_10 fine_tap_11 fine_tap_12 fine_tap_13 fine_tap_14
 * Turn off the reference and force both starve mirrors off in standby.
 Xp_eninv disable enable vdd vdd sky130_fd_pr__pfet_01v8 w=0.84 l=0.15 nf=1 ad=0.2436 as=0.2436 pd=2.26 ps=2.26 nrd=0.3452 nrs=0.3452
 Xn_eninv disable enable vss vss sky130_fd_pr__nfet_01v8 w=0.42 l=0.15 nf=1 ad=0.1218 as=0.1218 pd=1.42 ps=1.42 nrd=0.6905 nrs=0.6905
@@ -54,6 +72,13 @@ Xn_diode bn bn vss vss sky130_fd_pr__nfet_01v8 w=2.1 l=0.5 nf=1 ad=0.609 as=0.60
 Xp_off bp enable vdd vdd sky130_fd_pr__pfet_01v8 w=0.84 l=0.15 nf=1 ad=0.2436 as=0.2436 pd=2.26 ps=2.26 nrd=0.3452 nrs=0.3452
 Xn_off bn disable vss vss sky130_fd_pr__nfet_01v8 w=0.42 l=0.15 nf=1 ad=0.1218 as=0.1218 pd=1.42 ps=1.42 nrd=0.6905 nrs=0.6905
 Xseed n0 disable vss vss sky130_fd_pr__nfet_01v8 w=0.84 l=0.15 nf=1 ad=0.2436 as=0.2436 pd=2.26 ps=2.26 nrd=0.3452 nrs=0.3452
+* Fine slices use the lowest-weight coarse unit and a nominal 20:1 mirror.
+Xfine_p_diode fine_bp fine_bp vdd vdd sky130_fd_pr__pfet_01v8 w=8.4 l=0.5 nf=1 ad=2.436 as=2.436 pd=17.38 ps=17.38 nrd=0.03452 nrs=0.03452
+Xfine_p_mirror fine_bn fine_bp vdd vdd sky130_fd_pr__pfet_01v8 w=0.42 l=0.5 nf=1 ad=0.1218 as=0.1218 pd=1.42 ps=1.42 nrd=0.6905 nrs=0.6905
+Xfine_n_diode fine_bn fine_bn vss vss sky130_fd_pr__nfet_01v8 w=0.84 l=0.5 nf=1 ad=0.2436 as=0.2436 pd=2.26 ps=2.26 nrd=0.3452 nrs=0.3452
+Xfine_n_mirror bp fine_bn vss vss sky130_fd_pr__nfet_01v8 w=0.84 l=0.5 nf=1 ad=0.2436 as=0.2436 pd=2.26 ps=2.26 nrd=0.3452 nrs=0.3452
+Xfine_p_off fine_bp enable vdd vdd sky130_fd_pr__pfet_01v8 w=0.84 l=0.15 nf=1 ad=0.2436 as=0.2436 pd=2.26 ps=2.26 nrd=0.3452 nrs=0.3452
+Xfine_n_off fine_bn disable vss vss sky130_fd_pr__nfet_01v8 w=0.42 l=0.15 nf=1 ad=0.1218 as=0.1218 pd=1.42 ps=1.42 nrd=0.6905 nrs=0.6905
 * Tapered thermometer bank. The control flops sit at the macro boundary.
 Xu0 bp vref therm_0 vss cpz4_dac_unit_0
 Xu1 bp vref therm_1 vss cpz4_dac_unit_0
@@ -310,21 +335,169 @@ Xu251 bp vref therm_251 vss cpz4_dac_unit_6
 Xu252 bp vref therm_252 vss cpz4_dac_unit_6
 Xu253 bp vref therm_253 vss cpz4_dac_unit_6
 Xu254 bp vref therm_254 vss cpz4_dac_unit_6
+Xfine_unit0 fine_bp vref fine_therm_0 vss cpz4_dac_unit_0
+Xfine_unit1 fine_bp vref fine_therm_1 vss cpz4_dac_unit_0
+Xfine_unit2 fine_bp vref fine_therm_2 vss cpz4_dac_unit_0
+Xfine_unit3 fine_bp vref fine_therm_3 vss cpz4_dac_unit_0
+Xfine_unit4 fine_bp vref fine_therm_4 vss cpz4_dac_unit_0
+Xfine_unit5 fine_bp vref fine_therm_5 vss cpz4_dac_unit_0
+Xfine_unit6 fine_bp vref fine_therm_6 vss cpz4_dac_unit_0
+Xfine_unit7 fine_bp vref fine_therm_7 vss cpz4_dac_unit_0
+Xfine_unit8 fine_bp vref fine_therm_8 vss cpz4_dac_unit_0
+Xfine_unit9 fine_bp vref fine_therm_9 vss cpz4_dac_unit_0
+Xfine_unit10 fine_bp vref fine_therm_10 vss cpz4_dac_unit_0
+Xfine_unit11 fine_bp vref fine_therm_11 vss cpz4_dac_unit_0
+Xfine_unit12 fine_bp vref fine_therm_12 vss cpz4_dac_unit_0
+Xfine_unit13 fine_bp vref fine_therm_13 vss cpz4_dac_unit_0
+Xfine_unit14 fine_bp vref fine_therm_14 vss cpz4_dac_unit_0
+Xfine_unit15 fine_bp vref fine_therm_15 vss cpz4_dac_unit_0
+Xfine_unit16 fine_bp vref fine_therm_16 vss cpz4_dac_unit_0
+Xfine_unit17 fine_bp vref fine_therm_17 vss cpz4_dac_unit_0
+Xfine_unit18 fine_bp vref fine_therm_18 vss cpz4_dac_unit_0
+Xfine_unit19 fine_bp vref fine_therm_19 vss cpz4_dac_unit_0
+Xfine_unit20 fine_bp vref fine_therm_20 vss cpz4_dac_unit_0
+Xfine_unit21 fine_bp vref fine_therm_21 vss cpz4_dac_unit_0
+Xfine_unit22 fine_bp vref fine_therm_22 vss cpz4_dac_unit_0
+Xfine_unit23 fine_bp vref fine_therm_23 vss cpz4_dac_unit_0
+Xfine_unit24 fine_bp vref fine_therm_24 vss cpz4_dac_unit_0
+Xfine_unit25 fine_bp vref fine_therm_25 vss cpz4_dac_unit_0
+Xfine_unit26 fine_bp vref fine_therm_26 vss cpz4_dac_unit_0
+Xfine_unit27 fine_bp vref fine_therm_27 vss cpz4_dac_unit_0
+Xfine_unit28 fine_bp vref fine_therm_28 vss cpz4_dac_unit_0
+Xfine_unit29 fine_bp vref fine_therm_29 vss cpz4_dac_unit_0
+Xfine_unit30 fine_bp vref fine_therm_30 vss cpz4_dac_unit_0
+Xfine_unit31 fine_bp vref fine_therm_31 vss cpz4_dac_unit_0
+Xfine_unit32 fine_bp vref fine_therm_32 vss cpz4_dac_unit_0
+Xfine_unit33 fine_bp vref fine_therm_33 vss cpz4_dac_unit_0
+Xfine_unit34 fine_bp vref fine_therm_34 vss cpz4_dac_unit_0
+Xfine_unit35 fine_bp vref fine_therm_35 vss cpz4_dac_unit_0
+Xfine_unit36 fine_bp vref fine_therm_36 vss cpz4_dac_unit_0
+Xfine_unit37 fine_bp vref fine_therm_37 vss cpz4_dac_unit_0
+Xfine_unit38 fine_bp vref fine_therm_38 vss cpz4_dac_unit_0
+Xfine_unit39 fine_bp vref fine_therm_39 vss cpz4_dac_unit_0
+Xfine_unit40 fine_bp vref fine_therm_40 vss cpz4_dac_unit_0
+Xfine_unit41 fine_bp vref fine_therm_41 vss cpz4_dac_unit_0
+Xfine_unit42 fine_bp vref fine_therm_42 vss cpz4_dac_unit_0
+Xfine_unit43 fine_bp vref fine_therm_43 vss cpz4_dac_unit_0
+Xfine_unit44 fine_bp vref fine_therm_44 vss cpz4_dac_unit_0
+Xfine_unit45 fine_bp vref fine_therm_45 vss cpz4_dac_unit_0
+Xfine_unit46 fine_bp vref fine_therm_46 vss cpz4_dac_unit_0
+Xfine_unit47 fine_bp vref fine_therm_47 vss cpz4_dac_unit_0
+Xfine_unit48 fine_bp vref fine_therm_48 vss cpz4_dac_unit_0
+Xfine_unit49 fine_bp vref fine_therm_49 vss cpz4_dac_unit_0
+Xfine_unit50 fine_bp vref fine_therm_50 vss cpz4_dac_unit_0
+Xfine_unit51 fine_bp vref fine_therm_51 vss cpz4_dac_unit_0
+Xfine_unit52 fine_bp vref fine_therm_52 vss cpz4_dac_unit_0
+Xfine_unit53 fine_bp vref fine_therm_53 vss cpz4_dac_unit_0
+Xfine_unit54 fine_bp vref fine_therm_54 vss cpz4_dac_unit_0
+Xfine_unit55 fine_bp vref fine_therm_55 vss cpz4_dac_unit_0
+Xfine_unit56 fine_bp vref fine_therm_56 vss cpz4_dac_unit_0
+Xfine_unit57 fine_bp vref fine_therm_57 vss cpz4_dac_unit_0
+Xfine_unit58 fine_bp vref fine_therm_58 vss cpz4_dac_unit_0
+Xfine_unit59 fine_bp vref fine_therm_59 vss cpz4_dac_unit_0
+Xfine_unit60 fine_bp vref fine_therm_60 vss cpz4_dac_unit_0
+Xfine_unit61 fine_bp vref fine_therm_61 vss cpz4_dac_unit_0
+Xfine_unit62 fine_bp vref fine_therm_62 vss cpz4_dac_unit_0
+Xfine_unit63 fine_bp vref fine_therm_63 vss cpz4_dac_unit_0
+Xfine_unit64 fine_bp vref fine_therm_64 vss cpz4_dac_unit_0
+Xfine_unit65 fine_bp vref fine_therm_65 vss cpz4_dac_unit_0
+Xfine_unit66 fine_bp vref fine_therm_66 vss cpz4_dac_unit_0
+Xfine_unit67 fine_bp vref fine_therm_67 vss cpz4_dac_unit_0
+Xfine_unit68 fine_bp vref fine_therm_68 vss cpz4_dac_unit_0
+Xfine_unit69 fine_bp vref fine_therm_69 vss cpz4_dac_unit_0
+Xfine_unit70 fine_bp vref fine_therm_70 vss cpz4_dac_unit_0
+Xfine_unit71 fine_bp vref fine_therm_71 vss cpz4_dac_unit_0
+Xfine_unit72 fine_bp vref fine_therm_72 vss cpz4_dac_unit_0
+Xfine_unit73 fine_bp vref fine_therm_73 vss cpz4_dac_unit_0
+Xfine_unit74 fine_bp vref fine_therm_74 vss cpz4_dac_unit_0
+Xfine_unit75 fine_bp vref fine_therm_75 vss cpz4_dac_unit_0
+Xfine_unit76 fine_bp vref fine_therm_76 vss cpz4_dac_unit_0
+Xfine_unit77 fine_bp vref fine_therm_77 vss cpz4_dac_unit_0
+Xfine_unit78 fine_bp vref fine_therm_78 vss cpz4_dac_unit_0
+Xfine_unit79 fine_bp vref fine_therm_79 vss cpz4_dac_unit_0
+Xfine_unit80 fine_bp vref fine_therm_80 vss cpz4_dac_unit_0
+Xfine_unit81 fine_bp vref fine_therm_81 vss cpz4_dac_unit_0
+Xfine_unit82 fine_bp vref fine_therm_82 vss cpz4_dac_unit_0
+Xfine_unit83 fine_bp vref fine_therm_83 vss cpz4_dac_unit_0
+Xfine_unit84 fine_bp vref fine_therm_84 vss cpz4_dac_unit_0
+Xfine_unit85 fine_bp vref fine_therm_85 vss cpz4_dac_unit_0
+Xfine_unit86 fine_bp vref fine_therm_86 vss cpz4_dac_unit_0
+Xfine_unit87 fine_bp vref fine_therm_87 vss cpz4_dac_unit_0
+Xfine_unit88 fine_bp vref fine_therm_88 vss cpz4_dac_unit_0
+Xfine_unit89 fine_bp vref fine_therm_89 vss cpz4_dac_unit_0
+Xfine_unit90 fine_bp vref fine_therm_90 vss cpz4_dac_unit_0
+Xfine_unit91 fine_bp vref fine_therm_91 vss cpz4_dac_unit_0
+Xfine_unit92 fine_bp vref fine_therm_92 vss cpz4_dac_unit_0
+Xfine_unit93 fine_bp vref fine_therm_93 vss cpz4_dac_unit_0
+Xfine_unit94 fine_bp vref fine_therm_94 vss cpz4_dac_unit_0
+Xfine_unit95 fine_bp vref fine_therm_95 vss cpz4_dac_unit_0
+Xfine_unit96 fine_bp vref fine_therm_96 vss cpz4_dac_unit_0
+Xfine_unit97 fine_bp vref fine_therm_97 vss cpz4_dac_unit_0
+Xfine_unit98 fine_bp vref fine_therm_98 vss cpz4_dac_unit_0
+Xfine_unit99 fine_bp vref fine_therm_99 vss cpz4_dac_unit_0
+Xfine_unit100 fine_bp vref fine_therm_100 vss cpz4_dac_unit_0
+Xfine_unit101 fine_bp vref fine_therm_101 vss cpz4_dac_unit_0
+Xfine_unit102 fine_bp vref fine_therm_102 vss cpz4_dac_unit_0
+Xfine_unit103 fine_bp vref fine_therm_103 vss cpz4_dac_unit_0
+Xfine_unit104 fine_bp vref fine_therm_104 vss cpz4_dac_unit_0
+Xfine_unit105 fine_bp vref fine_therm_105 vss cpz4_dac_unit_0
+Xfine_unit106 fine_bp vref fine_therm_106 vss cpz4_dac_unit_0
+Xfine_unit107 fine_bp vref fine_therm_107 vss cpz4_dac_unit_0
+Xfine_unit108 fine_bp vref fine_therm_108 vss cpz4_dac_unit_0
+Xfine_unit109 fine_bp vref fine_therm_109 vss cpz4_dac_unit_0
+Xfine_unit110 fine_bp vref fine_therm_110 vss cpz4_dac_unit_0
+Xfine_unit111 fine_bp vref fine_therm_111 vss cpz4_dac_unit_0
+Xfine_unit112 fine_bp vref fine_therm_112 vss cpz4_dac_unit_0
+Xfine_unit113 fine_bp vref fine_therm_113 vss cpz4_dac_unit_0
+Xfine_unit114 fine_bp vref fine_therm_114 vss cpz4_dac_unit_0
+Xfine_unit115 fine_bp vref fine_therm_115 vss cpz4_dac_unit_0
+Xfine_unit116 fine_bp vref fine_therm_116 vss cpz4_dac_unit_0
+Xfine_unit117 fine_bp vref fine_therm_117 vss cpz4_dac_unit_0
+Xfine_unit118 fine_bp vref fine_therm_118 vss cpz4_dac_unit_0
+Xfine_unit119 fine_bp vref fine_therm_119 vss cpz4_dac_unit_0
+Xfine_unit120 fine_bp vref fine_therm_120 vss cpz4_dac_unit_0
+Xfine_unit121 fine_bp vref fine_therm_121 vss cpz4_dac_unit_0
+Xfine_unit122 fine_bp vref fine_therm_122 vss cpz4_dac_unit_0
+Xfine_unit123 fine_bp vref fine_therm_123 vss cpz4_dac_unit_0
+Xfine_unit124 fine_bp vref fine_therm_124 vss cpz4_dac_unit_0
+Xfine_unit125 fine_bp vref fine_therm_125 vss cpz4_dac_unit_0
+Xfine_unit126 fine_bp vref fine_therm_126 vss cpz4_dac_unit_0
+Xfine_unit127 fine_bp vref fine_therm_127 vss cpz4_dac_unit_0
 Xs0 n4 n0 bp bn vdd vss cpz4_starved_stage
 Xload0 n0 vss sky130_fd_pr__cap_mim_m3_1 w=2.2 l=2.2
 Xb0 n0 tap_0 vdd vss cpz4_tap_buffer
+Xdelay0 tap_0 fine_tap_0 vdd vss cpz4_fine_delay
+Xdelay1 fine_tap_0 fine_tap_1 vdd vss cpz4_fine_delay
+Xdelay2 fine_tap_1 fine_tap_2 vdd vss cpz4_fine_delay
+Xdelay_load0 fine_tap_2 fine_dummy_0 vdd vss cpz4_fine_delay
 Xs1 n0 n1 bp bn vdd vss cpz4_starved_stage
 Xload1 n1 vss sky130_fd_pr__cap_mim_m3_1 w=2.2 l=2.2
 Xb1 n1 tap_1 vdd vss cpz4_tap_buffer
+Xdelay3 tap_1 fine_tap_3 vdd vss cpz4_fine_delay
+Xdelay4 fine_tap_3 fine_tap_4 vdd vss cpz4_fine_delay
+Xdelay5 fine_tap_4 fine_tap_5 vdd vss cpz4_fine_delay
+Xdelay_load1 fine_tap_5 fine_dummy_1 vdd vss cpz4_fine_delay
 Xs2 n1 n2 bp bn vdd vss cpz4_starved_stage
 Xload2 n2 vss sky130_fd_pr__cap_mim_m3_1 w=2.2 l=2.2
 Xb2 n2 tap_2 vdd vss cpz4_tap_buffer
+Xdelay6 tap_2 fine_tap_6 vdd vss cpz4_fine_delay
+Xdelay7 fine_tap_6 fine_tap_7 vdd vss cpz4_fine_delay
+Xdelay8 fine_tap_7 fine_tap_8 vdd vss cpz4_fine_delay
+Xdelay_load2 fine_tap_8 fine_dummy_2 vdd vss cpz4_fine_delay
 Xs3 n2 n3 bp bn vdd vss cpz4_starved_stage
 Xload3 n3 vss sky130_fd_pr__cap_mim_m3_1 w=2.2 l=2.2
 Xb3 n3 tap_3 vdd vss cpz4_tap_buffer
+Xdelay9 tap_3 fine_tap_9 vdd vss cpz4_fine_delay
+Xdelay10 fine_tap_9 fine_tap_10 vdd vss cpz4_fine_delay
+Xdelay11 fine_tap_10 fine_tap_11 vdd vss cpz4_fine_delay
+Xdelay_load3 fine_tap_11 fine_dummy_3 vdd vss cpz4_fine_delay
 Xs4 n3 n4 bp bn vdd vss cpz4_starved_stage
 Xload4 n4 vss sky130_fd_pr__cap_mim_m3_1 w=2.2 l=2.2
 Xb4 n4 tap_4 vdd vss cpz4_tap_buffer
+Xdelay12 tap_4 fine_tap_12 vdd vss cpz4_fine_delay
+Xdelay13 fine_tap_12 fine_tap_13 vdd vss cpz4_fine_delay
+Xdelay14 fine_tap_13 fine_tap_14 vdd vss cpz4_fine_delay
+Xdelay_load4 fine_tap_14 fine_dummy_4 vdd vss cpz4_fine_delay
 .ends cpz4_dco
 .subckt cpz4_dac_unit_0 bp bias select vss
 Xunit bp bias src vss sky130_fd_pr__nfet_01v8 w=0.42 l=4 nf=1 ad=0.1218 as=0.1218 pd=1.42 ps=1.42 nrd=0.6905 nrs=0.6905
