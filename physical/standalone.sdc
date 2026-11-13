@@ -6,10 +6,24 @@ set dco_period 2.5
 if {[info exists ::env(DCO_PERIOD_NS)]} {
     set dco_period $::env(DCO_PERIOD_NS)
 }
+set dco_high [expr {$dco_period * 0.5}]
+if {[info exists ::env(DCO_HIGH_NS)]} {
+    set dco_high $::env(DCO_HIGH_NS)
+}
+if {$dco_high <= 0 || $dco_high >= $dco_period} {
+    error {DCO_HIGH_NS must be between zero and DCO_PERIOD_NS}
+}
 create_clock -name ref_clk -period $ref_period [get_ports ref_clk]
-set tap0 [get_pins -quiet -regexp {^oscillator/tap\[0\]$}]
+set oscillator [get_cells -quiet oscillator]
+if {[llength $oscillator] != 1} { error {Expected one oscillator instance} }
+set phase_sources [get_pins -quiet -of_objects $oscillator -filter {direction==output}]
+if {[llength $phase_sources] != 20} { error {Expected 20 oscillator phase output pins} }
+set tap0 {}
+foreach pin $phase_sources {
+    if {[regexp {/tap\[0\]$} [get_full_name $pin]]} { lappend tap0 $pin }
+}
 if {[llength $tap0] != 1} { error {Expected one oscillator tap[0] pin} }
-create_clock -name dco_clk -period $dco_period $tap0
+create_clock -name dco_clk -period $dco_period -waveform [list 0 $dco_high] $tap0
 
 # Locate the two registered divider outputs by their connected nets.
 foreach {net_name clock_name divide} {
@@ -24,11 +38,48 @@ foreach {net_name clock_name divide} {
         -divide_by $divide $outputs
 }
 
-# Inter-domain paths terminate at explicit two-stage capture chains. Keep
-# their routing short while the physical skew and aperture are reviewed.
-set_max_delay -ignore_clock_latency 1.0 -from [get_clocks {dco_clk dco_div2}] -to [get_clocks ref_clk]
-set_max_delay -ignore_clock_latency 2.0 -from [get_clocks ref_clk] -to [get_clocks dco_div2]
-set_false_path -hold -from [get_clocks {dco_clk dco_div2}] -to [get_clocks ref_clk]
-set_false_path -hold -from [get_clocks ref_clk] -to [get_clocks dco_div2]
+# Locate the first-stage D pins by their Q nets. The launch Gray nets
+# can feed DCO-domain logic as well as the reference capture chain.
+proc cpz4_capture_flop_inputs {nets count} {
+    if {[llength $nets] != $count} { error "Expected $count first-stage nets" }
+    set inputs [dict create]
+    foreach net $nets {
+        set name [get_full_name $net]
+        set q [get_pins -quiet -of_objects $net -filter {direction==output}]
+        if {[llength $q] != 1} { error "Expected one first-stage flop on $name" }
+        set cell [get_cells -quiet -of_objects $q]
+        set data {}
+        foreach pin [get_pins -quiet -of_objects $cell -filter {direction==input}] {
+            if {[regexp {/D$} [get_full_name $pin]]} { lappend data $pin }
+        }
+        if {[llength $data] != 1} { error "Expected one capture D pin on $name" }
+        dict set inputs $name [lindex $data 0]
+    }
+    return $inputs
+}
+
+set gray_nets [get_nets -quiet -regexp {^controller\.sampler\.(pos_meta|neg_meta)\[[0-9]+\]$}]
+set cpz4_gray_capture [cpz4_capture_flop_inputs $gray_nets 24]
+
+set_max_delay -ignore_clock_latency 1.0 -from [get_clocks dco_clk] -to [dict values $cpz4_gray_capture]
+set_false_path -hold -from [get_clocks dco_clk] -to [dict values $cpz4_gray_capture]
+
+# Phase taps are analog macro outputs. Constrain their route from the pin
+# to the receiver separately from the clocked Gray launch path.
+set phase_nets [get_nets -quiet -regexp {^controller\.sampler\.(tap_meta|fine_meta)\[[0-9]+\]$}]
+set cpz4_phase_capture [cpz4_capture_flop_inputs $phase_nets 20]
+set_max_delay -ignore_clock_latency 1.0 -from $phase_sources -to [dict values $cpz4_phase_capture]
+set_false_path -hold -from $phase_sources -to [dict values $cpz4_phase_capture]
+
+# Apply the same endpoint discipline to the one-bit crossings.
+foreach {pattern count source budget} {
+    {^controller\.sampler\.ready_pipe\[0\]$} 1 dco_clk 1.0
+    {^controller\.watchdog\.trip_pipe\[0\]$} 1 dco_div2 1.0
+    {^controller\.watchdog\.(beat_pipe|ack_pipe)\[0\]$} 2 ref_clk 2.0
+} {
+    set inputs [cpz4_capture_flop_inputs [get_nets -quiet -regexp $pattern] $count]
+    set_max_delay -ignore_clock_latency $budget -from [get_clocks $source] -to [dict values $inputs]
+    set_false_path -hold -from [get_clocks $source] -to [dict values $inputs]
+}
 set_clock_uncertainty 0.1 [get_clocks {dco_clk dco_div2 dco_div4}]
 set_clock_uncertainty 0.2 [get_clocks ref_clk]

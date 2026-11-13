@@ -15,7 +15,9 @@ module cpz4_pll #(
         120'hbb0b2dae4a9fa1899c96992c8b0827,
         120'h7c07646dd6616235d05474c447b436,
         120'h3af3332f52a12181961531340ca040
-    }
+    },
+    parameter [7:0] MAX_COARSE_CODE = 8'd255,
+    parameter TRACKING_REPLICAS = 1'b0
 ) (
     input  wire         ref_clk,
     input  wire         reset_n,
@@ -35,6 +37,20 @@ module cpz4_pll #(
     localparam [16:0] DEFAULT_RATIO = 17'd41984;  // 10.25 in unsigned Q5.12
     localparam [119:0] COARSE_CENTERS = {12'd3891, 12'd3482, 12'd3072, 12'd2662,
         12'd2253, 12'd1843, 12'd1434, 12'd1024, 12'd614, 12'd205};
+    localparam [479:0] TRACKING_FINE_CENTERS = {
+        // TT tracking-replica schematic, coarse 52, fine 64.
+        120'hfb2f38edfe81e11da4d4bce7c72c0a,
+        120'hbb1b54ae3a76a1c9b89448dc88382f,
+        120'h7b973b6e267e6095a25494eb47b40e,
+        120'h3b53512db27321a1bc14d0e108702e
+    };
+    localparam [479:0] TRACKING_SLOW_CENTERS = {
+        // SS tracking-replica schematic, 1.62 V, 0 C, coarse 172, fine 64.
+        120'hfcef5cee6e70e1bdced58cd9c82c2e,
+        120'hbb8b42aedaa0a2a9ab95590188b825,
+        120'h7c97656ef6706195c554f4d9484437,
+        120'h3c13422eb2972211ab15710b09502c
+    };
 
     wire ref_reset_n, run_n, dco_reset_n;
     cpz4_reset_release config_reset(ref_clk, reset_n, ref_reset_n);
@@ -83,12 +99,13 @@ module cpz4_pll #(
                                        fine_valid, fine_bin, cfg_data[5:0], fine_center, read_center,
                                        read_hits, cal_busy, cal_valid, cal_error);
         end else begin : fixed_centers
-            wire [959:0] profiles = {SLOW_FINE_CENTERS, FIXED_FINE_CENTERS};
+            localparam [959:0] PROFILES = TRACKING_REPLICAS ?
+                {TRACKING_SLOW_CENTERS, TRACKING_FINE_CENTERS} : {SLOW_FINE_CENTERS, FIXED_FINE_CENTERS};
             wire [6:0] detector_index = slow_phase_profile ? {1'b0, fine_bin} + 7'd40 : {1'b0, fine_bin};
             wire [6:0] read_index = slow_phase_profile ? {1'b0, cfg_data[5:0]} + 7'd40 : {1'b0, cfg_data[5:0]};
-            assign fine_center = fine_bin < 6'd40 ? profiles[12*detector_index +: 12] : 12'd0;
+            assign fine_center = fine_bin < 6'd40 ? PROFILES[12*detector_index +: 12] : 12'd0;
             assign read_center = cfg_data[5:0] < 6'd40 ?
-                                 profiles[12*read_index +: 12] : 12'd0;
+                                 PROFILES[12*read_index +: 12] : 12'd0;
             assign read_hits = 0;
             assign cal_busy = 0;
             assign cal_valid = 0;
@@ -143,7 +160,7 @@ module cpz4_pll #(
             slow_phase_profile <= 0;
             narrow_near_integer <= 0;
             manual_code  <= 8'd24;
-            code_ceiling <= 8'd255;
+            code_ceiling <= MAX_COARSE_CODE;
             ref_upper_mhz <= 6'd32;
             tracking_gear <= 2'd2;
             restart      <= 0;
@@ -188,7 +205,7 @@ module cpz4_pll #(
                     end
                     3'd2: begin
                         if (cfg_data[16:8] == 9'h100) begin
-                            if (cfg_data[7:0] < 8'd16 || cal_active ||
+                            if (cfg_data[7:0] < 8'd16 || cfg_data[7:0] > MAX_COARSE_CODE || cal_active ||
                                 (manual && manual_code > cfg_data[7:0])) config_error <= 1'b1;
                             else begin
                                 code_ceiling <= cfg_data[7:0];
@@ -239,7 +256,7 @@ module cpz4_pll #(
                             17'd9: read_byte <= {6'b0, tracking_gear};
                             17'd10: read_byte <= {2'b0, ref_upper_mhz};
                             17'd11: read_byte <= {7'b0, ON_CHIP_CAL};
-                            17'd12: read_byte <= {6'b0, narrow_near_integer, slow_phase_profile};
+                            17'd12: read_byte <= {5'b0, TRACKING_REPLICAS, narrow_near_integer, slow_phase_profile};
                             default: read_byte <= 8'd0;
                         endcase
                     end

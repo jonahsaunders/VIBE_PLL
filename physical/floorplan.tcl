@@ -70,4 +70,5 @@ if {[info exists ::env(RUN_GLOBAL_ROUTE)] && $::env(RUN_GLOBAL_ROUTE) eq "1"} {
     global_route -guide_file [file join $out pll.guide]
     write_def [file join $out placed.def]
     report_checks -path_delay min_max -group_path_count 5
+    source [file join $here capture_paths.tcl]
 }

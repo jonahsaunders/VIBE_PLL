@@ -38,7 +38,17 @@ def coarse_curve(points, max_code):
         yield [values[0], *(width / total_width for width in values[1:])]
 
 
-def spice_table(source, destination):
+def phase_centers(widths):
+    total = sum(widths)
+    edge = 0.0
+    centers = []
+    for width in widths:
+        centers.append(min(4095, int(4096 * (edge + width / 2) / total + 0.5)))
+        edge += width
+    return centers
+
+
+def spice_table(source, destination, *, ideal_quarter_bins=False, lut_point=None, phase_shape=None):
     with source.open(newline="", encoding="ascii") as file:
         rows = list(csv.DictReader(file))
     if not rows or "fine_code" not in rows[0]:
@@ -46,6 +56,27 @@ def spice_table(source, destination):
     pvt = {(r["corner"], float(r["vdd"]), float(r["temp_c"])) for r in rows}
     if len(pvt) != 1:
         raise ValueError("Provide a coarse/fine DCO sweep from one PVT condition")
+    proportions = [0.25] * 40 if ideal_quarter_bins else None
+    if phase_shape is not None:
+        with phase_shape.open(newline="", encoding="ascii") as file:
+            shapes = list(csv.DictReader(file))
+        if len(shapes) != 1:
+            raise ValueError("Provide one SPICE row for the replacement phase shape")
+        shape = shapes[0]
+        if (shape["corner"], float(shape["vdd"]), float(shape["temp_c"])) not in pvt:
+            raise ValueError("The replacement phase shape and sweep must have the same PVT condition")
+        if int(shape["bad_tap_sequences"]) or int(shape["bad_fine_sequences"]):
+            raise ValueError("The replacement phase shape has an illegal tap sequence")
+        widths = [float(shape[f"fine_bin_{i}_ui"]) for i in range(40)]
+        if (not all(math.isfinite(width) and width >= 0 for width in widths) or
+            not math.isclose(sum(widths), 1, abs_tol=1e-5)):
+            raise ValueError("Invalid replacement phase-bin widths")
+        proportions = []
+        for start in range(0, 40, 4):
+            group = widths[start:start + 4]
+            if sum(group) <= 0:
+                raise ValueError("The replacement phase shape must cover all coarse intervals")
+            proportions.extend(width / sum(group) for width in group)
     sweeps = {}
     for row in rows:
         coarse, fine = int(row["code"]), int(row["fine_code"])
@@ -58,6 +89,11 @@ def spice_table(source, destination):
         if (not all(math.isfinite(value) and value >= 0 for value in values) or
             values[0] <= 0 or not math.isclose(sum(values[1:]), 1, abs_tol=1e-5)):
             raise ValueError(f"Invalid phase-bin or frequency at {coarse}:{fine}")
+        if proportions is not None:
+            # Preserve the measured coarse edges and the entire tuning curve.
+            for start in range(0, 40, 4):
+                interval = sum(values[start + 1:start + 5])
+                values[start + 1:start + 5] = [interval * share for share in proportions[start:start + 4]]
         points[coarse] = values
 
     anchors = sorted(sweeps)
@@ -72,6 +108,13 @@ def spice_table(source, destination):
                 raise ValueError(f"Nonmonotonic interpolated fine sweep at code {code}")
             for values in entries:
                 file.write(" ".join(f"{value:.10f}" for value in values) + "\n")
+    if lut_point is not None:
+        coarse, fine = lut_point
+        if fine not in sweeps or coarse not in sweeps[fine]:
+            raise ValueError(f"Phase LUT point {coarse}:{fine} must be present in the sweep")
+        centers = phase_centers(sweeps[fine][coarse][1:])
+        destination.with_suffix(".lut").write_text(
+            "".join(f"{center:03x}\n" for center in centers), encoding="ascii")
     return max_code
 
 
@@ -93,7 +136,7 @@ def main():
     parser.add_argument("--iverilog", default="iverilog")
     parser.add_argument("--vvp", default="vvp")
     parser.add_argument("--compiled-testbench", type=Path,
-                        help="reuse a tb_pll.vvp compiled with the matching ON_CHIP_CAL setting")
+                        help="reuse a tb_pll.vvp compiled with the matching calibration and replica settings")
     parser.add_argument("--trace", type=Path, help="write a nominal transient trace CSV")
     parser.add_argument("--spice-data", type=Path, help="use a single PVT DCO sweep CSV")
     parser.add_argument("--corner-grid", action="store_true", help="run the fixed-center PVT regression grid")
@@ -110,6 +153,15 @@ def main():
     parser.add_argument("--fixed-centers", action="store_true", help="use the area-saving fixed TDC table")
     parser.add_argument("--coarse-phase", action="store_true", help="use the ten-bin detector for the loop")
     parser.add_argument("--slow-phase-profile", action="store_true", help="use the slow-cold fixed table")
+    parser.add_argument("--tracking-replicas", action="store_true",
+                        help="use the tracking-replica fixed tables with a matching SPICE sweep")
+    parser.add_argument("--phase-lut-point", type=int, nargs=2, metavar=("COARSE", "FINE"),
+                        help="derive the fixed replay LUT from this measured sweep point")
+    phase_group = parser.add_mutually_exclusive_group()
+    phase_group.add_argument("--ideal-quarter-bins", action="store_true",
+                             help="split each measured coarse interval into equal quarters in the replay")
+    phase_group.add_argument("--phase-shape", type=Path,
+                             help="use the fine-bin proportions from a single SPICE probe at the same PVT")
     parser.add_argument("--no-dither", action="store_true", help="disable fine-DAC residue feedback")
     parser.add_argument("--narrow-near-integer", action="store_true",
                         help="reduce tracking bandwidth one step at +/-1 LSB from integer ratios")
@@ -122,6 +174,16 @@ def main():
         parser.error("--corner-grid requires --fixed-centers and uses the repository sweeps")
     if args.slow_phase_profile and (not args.fixed_centers or args.coarse_phase):
         parser.error("--slow-phase-profile requires the fixed fine detector")
+    if args.tracking_replicas and (not args.spice_data or not args.fixed_centers or args.coarse_phase):
+        parser.error("--tracking-replicas requires a matching SPICE sweep and the fixed fine detector")
+    if args.phase_lut_point and (not args.spice_data or not args.fixed_centers or
+                                 args.coarse_phase or args.slow_phase_profile):
+        parser.error("--phase-lut-point requires a single SPICE sweep and the fixed fine detector")
+    if args.ideal_quarter_bins and not args.phase_lut_point:
+        parser.error("--ideal-quarter-bins requires --phase-lut-point for the matching phase centers")
+    if args.phase_shape and (not args.spice_data or not args.fixed_centers or args.coarse_phase or
+                             not (args.tracking_replicas or args.phase_lut_point)):
+        parser.error("--phase-shape requires a single SPICE sweep and matching fixed phase centers")
     if args.spectrum_edges < 2 or args.spectrum_settle < 0:
         parser.error("spectrum capture requires at least two edges and nonnegative settling")
     compiled = args.compiled_testbench.resolve(strict=True) if args.compiled_testbench else None
@@ -130,16 +192,26 @@ def main():
         output = compiled or build / "tb_pll.vvp"
         common = [args.iverilog, "-g2012", "-Wall", "-Wno-timescale"]
         parameter = int(not args.fixed_centers)
+        replicas = int(args.tracking_replicas)
         if compiled is None:
             subprocess.run([*common, "-s", "cpz4_sky130", f"-Pcpz4_sky130.ON_CHIP_CAL={parameter}",
+                            f"-Pcpz4_sky130.TRACKING_REPLICAS={replicas}",
                             "-t", "null", *RTL], check=True)
             subprocess.run([*common, "-s", "tb_pll", f"-Ptb_pll.ON_CHIP_CAL={parameter}",
+                            f"-Ptb_pll.TRACKING_REPLICAS={replicas}",
                             "-o", output, *RTL, ROOT / "tests" / "tb_pll.sv"], check=True)
         if not args.spice_data and not args.spectrum and not args.corner_grid and compiled is None:
-            counter = build / "tb_edge_counter.vvp"
-            subprocess.run([*common, "-s", "tb_edge_counter", "-o", counter, RTL[0],
-                            ROOT / "tests" / "tb_edge_counter.sv"], check=True)
-            subprocess.run([args.vvp, counter], check=True)
+            for top in ("tb_edge_counter", "tb_phase_sampler"):
+                unit_test = build / f"{top}.vvp"
+                subprocess.run([*common, "-s", top, "-o", unit_test, RTL[0],
+                                ROOT / "tests" / f"{top}.sv"], check=True)
+                subprocess.run([args.vvp, unit_test], check=True)
+            if args.fixed_centers:
+                ceiling_test = build / "tb_ceiling.vvp"
+                subprocess.run([*common, "-s", "tb_pll", "-Ptb_pll.ON_CHIP_CAL=0",
+                                "-Ptb_pll.MAX_COARSE_CODE=96", "-o", ceiling_test,
+                                *RTL, ROOT / "tests" / "tb_pll.sv"], check=True)
+                subprocess.run([args.vvp, ceiling_test, "+check_hard_ceiling"], check=True)
         if args.corner_grid:
             scenarios = {}
             ceilings = {}
@@ -153,8 +225,11 @@ def main():
                 ]
         elif args.spice_data:
             table = build / "dco.txt"
-            max_code = spice_table(args.spice_data, table)
+            max_code = spice_table(args.spice_data, table, ideal_quarter_bins=args.ideal_quarter_bins,
+                                   lut_point=args.phase_lut_point, phase_shape=args.phase_shape)
             extra = [f"+spice_table={table}", f"+ref={args.ref}", f"+code_ceiling={max_code}"]
+            if args.phase_lut_point:
+                extra.append(f"+phase_lut={table.with_suffix('.lut')}")
             for name, value in (("edge", args.edge), ("start_n", args.start), ("retune_n", args.retune)):
                 if value is not None:
                     extra.append(f"+{name}={value}")
@@ -172,7 +247,7 @@ def main():
         for label, options in scenarios.items():
             print(f"CASE {label}", flush=True)
             command = [args.vvp, output, *options, f"+startup_delay_ps={args.startup_delay_ps}",
-                       f"+expected_calibration={parameter}"]
+                       f"+expected_calibration={parameter}", f"+expected_tracking_replicas={replicas}"]
             if args.tracking_gear is not None:
                 command.append(f"+tracking_gear={args.tracking_gear}")
             if args.calibrate:

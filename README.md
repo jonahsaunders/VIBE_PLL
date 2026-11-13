@@ -9,6 +9,7 @@ The PLL has a coarse/fine DCO, a 40-bin phase detector, selectable tracking band
 - [Verification results](results/README.md)
 - [Area and floorplan check](results/slot-fit.md)
 - [Acquisition, spur, and DCO load verification](results/rev3.md)
+- [Rev. 4 detector, supply, and capture verification](results/rev4.md)
 - [Standalone floorplan and timing constraints](physical/README.md)
 - [Original literature review and design report](chipalooza4-sky130-pll-report.pdf)
 
@@ -30,6 +31,8 @@ python analysis/spectrum.py edges.csv --lower 1000
 ```
 
 For a closed-loop replay, run the circuit sweep at several coarse codes and fine settings, including both fine rails, then use `python tests/run_rtl.py --spice-data sweep.csv --ref 25`. The replay limits the controller to the highest measured coarse code. See the verification results for the exact sweep and replay settings. The RTL regression covers lock, retuning, reference-loss holdover and the startup guard. Run it without `--fixed-centers` to exercise the on-chip calibration option.
+
+The Rev. 4 prototype adds isolated, DCO-biased delay replicas. Generate it with `python spice/dco_deck.py --tracking-replicas --emit spice/cpz4_dco_tracking.spice` and pair it with the wrapper built using `TRACKING_REPLICAS=1`. The Rev. 4 results give commands for the ideal quarter-bin replay, the transistor-derived phase replay, and a separate filtered-bias experiment.
 
 The original PLL used a 10-bin detector and a single DCO bank. Its results and report document the baseline at [`feb059e`](https://github.com/jonahsaunders/VIBE_PLL/tree/feb059ec1b7f6b69b3c953039adff4dc6c05cbea).
 

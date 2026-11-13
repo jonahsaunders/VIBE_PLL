@@ -1,6 +1,6 @@
 # Verification results
 
-The [current compact build](rev3.md) uses the same oscillator schematic. The closed-loop and spectral tables below record the earlier self-calibrating revision. The [area page](slot-fit.md) records the first compact build and the planning methodology.
+The [Rev. 4 results](rev4.md) cover the tracking-replica schematic and capture checks. [Rev. 3](rev3.md) documents the previous compact build. The closed-loop and spectral tables below record the earlier self-calibrating revision. The [area page](slot-fit.md) records the first compact build and the planning methodology.
 
 ## Sky130A schematic
 

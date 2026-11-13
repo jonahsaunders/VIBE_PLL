@@ -25,6 +25,8 @@ DAC_GROUPS = ((80, 0.42, 4.0), (48, 0.42, 2.7), (32, 0.42, 1.6),
               (32, 0.42, 1.0), (32, 0.70, 1.0), (16, 1.05, 1.0), (15, 1.89, 1.0))
 TAP_ORDER = ((0, 1), (1, 0), (2, 1), (3, 0), (4, 1),
              (0, 0), (1, 1), (2, 0), (3, 1), (4, 0))
+RIPPLE_START_S = 200e-9
+BIAS_SETTLE_S = 1.8e-6
 
 
 def wrapped_line(prefix, nodes, suffix=""):
@@ -42,7 +44,7 @@ def mos(name, pins, channel, width, length):
             f"pd={perimeter:.4g} ps={perimeter:.4g} nrd={0.29 / width:.4g} nrs={0.29 / width:.4g}")
 
 
-def schematic(replica_strength=1.0):
+def schematic(replica_strength=1.0, tracking_replicas=False, filtered_bias=False):
     lines = [
         "* SPDX-License-Identifier: Apache-2.0",
         "* CPZ4 DCO. Geometry is in microns under the Sky130 SPICE library scale.",
@@ -54,10 +56,25 @@ def schematic(replica_strength=1.0):
         mos("n_core", ("z", "a", "down", "vss"), "n", 1.68, 0.15),
         mos("n_starve", ("down", "bn", "vss", "vss"), "n", 2.8, 0.50),
         ".ends cpz4_starved_stage",
-        ".subckt cpz4_fine_delay a z vdd vss",
-        mos("p_delay", ("z", "a", "vdd", "vdd"), "p", 1.68 * replica_strength, 0.15),
-        mos("n_delay", ("z", "a", "vss", "vss"), "n", 0.84 * replica_strength, 0.15),
-        ".ends cpz4_fine_delay",
+    ]
+    if tracking_replicas:
+        lines += [
+            ".subckt cpz4_fine_delay a z bp bn vdd vss",
+            mos("p_starve", ("up", "bp", "vdd", "vdd"), "p", 5.6 * replica_strength, 0.50),
+            mos("p_delay", ("z", "a", "up", "vdd"), "p", 3.36, 0.15),
+            mos("n_delay", ("z", "a", "down", "vss"), "n", 1.68, 0.15),
+            mos("n_starve", ("down", "bn", "vss", "vss"), "n", 2.8 * replica_strength, 0.50),
+            ".ends cpz4_fine_delay",
+        ]
+    else:
+        lines += [
+            ".subckt cpz4_fine_delay a z vdd vss",
+            mos("p_delay", ("z", "a", "vdd", "vdd"), "p", 1.68 * replica_strength, 0.15),
+            mos("n_delay", ("z", "a", "vss", "vss"), "n", 0.84 * replica_strength, 0.15),
+            ".ends cpz4_fine_delay",
+        ]
+    bias = "vbias" if filtered_bias else "vref"
+    lines += [
         ".subckt cpz4_tap_buffer a z vdd vss",
         mos("p_in", ("mid", "a", "vdd", "vdd"), "p", 0.84, 0.15),
         mos("n_in", ("mid", "a", "vss", "vss"), "n", 0.42, 0.15),
@@ -73,7 +90,16 @@ def schematic(replica_strength=1.0):
         "Xr_ref r_hi vref vss sky130_fd_pr__res_xhigh_po_0p35 l=8.40",
         mos("reference", ("vref", "vref", "vss", "vss"), "n", 4.2, 0.50),
         mos("reference_off", ("vref", "disable", "vss", "vss"), "n", 0.42, 0.15),
-        mos("base", ("bp", "vref", "vss", "vss"), "n", 3.36, 1.0),
+    ]
+    if filtered_bias:
+        lines += [
+            "* Isolate the DAC and base-current gate bias from supply ripple.",
+            "Xr_bias vref vbias vss sky130_fd_pr__res_xhigh_po_0p35 l=17.50",
+            "Xc_bias vbias vss sky130_fd_pr__cap_mim_m3_1 w=24 l=24",
+            mos("bias_off", ("vbias", "disable", "vss", "vss"), "n", 0.84, 0.15),
+        ]
+    lines += [
+        mos("base", ("bp", bias, "vss", "vss"), "n", 3.36, 1.0),
         mos("p_diode", ("bp", "bp", "vdd", "vdd"), "p", 4.2, 0.50),
         mos("p_replica", ("bn", "bp", "vdd", "vdd"), "p", 4.2, 0.50),
         mos("n_diode", ("bn", "bn", "vss", "vss"), "n", 2.1, 0.50),
@@ -92,25 +118,35 @@ def schematic(replica_strength=1.0):
     index = 0
     for group, (count, _width, _length) in enumerate(DAC_GROUPS):
         for pin in THERM_PINS[index:index + count]:
-            lines.append(f"Xu{index} bp vref {pin} vss cpz4_dac_unit_{group}")
+            lines.append(f"Xu{index} bp {bias} {pin} vss cpz4_dac_unit_{group}")
             index += 1
     for index, pin in enumerate(FINE_THERM_PINS):
-        lines.append(f"Xfine_unit{index} fine_bp vref {pin} vss cpz4_dac_unit_0")
+        lines.append(f"Xfine_unit{index} fine_bp {bias} {pin} vss cpz4_dac_unit_0")
     for index, tap in enumerate(TAP_PINS):
         lines += [
             f"Xs{index} n{(index - 1) % 5} n{index} bp bn vdd vss cpz4_starved_stage",
             f"Xload{index} n{index} vss sky130_fd_pr__cap_mim_m3_1 w=2.2 l=2.2",
-            f"Xb{index} n{index} {tap} vdd vss cpz4_tap_buffer",
         ]
-        # Start from the buffered ring tap to isolate the ring. Replicas
-        # alternate polarity, with the final inverter replicating the load.
         source = tap
+        delay_supplies = "vdd vss"
+        if tracking_replicas:
+            # The ring sees the same buffer input. A second set of identical
+            # buffers keeps receiver and routing loads off the delay chain.
+            source = f"launch_{index}"
+            delay_supplies = "bp bn vdd vss"
+            lines.append(f"Xsample{index} {source} {tap} vdd vss cpz4_tap_buffer")
+        lines.append(f"Xb{index} n{index} {source} vdd vss cpz4_tap_buffer")
         for substep in range(3):
             fine_index = 3 * index + substep
-            node = FINE_TAP_PINS[fine_index]
-            lines.append(f"Xdelay{fine_index} {source} {node} vdd vss cpz4_fine_delay")
+            output = FINE_TAP_PINS[fine_index]
+            node = f"delay_{fine_index}" if tracking_replicas else output
+            lines.append(f"Xdelay{fine_index} {source} {node} {delay_supplies} cpz4_fine_delay")
+            if tracking_replicas:
+                lines.append(f"Xfinebuf{fine_index} {node} {output} vdd vss cpz4_tap_buffer")
             source = node
-        lines.append(f"Xdelay_load{index} {source} fine_dummy_{index} vdd vss cpz4_fine_delay")
+        lines.append(f"Xdelay_load{index} {source} fine_dummy_{index} {delay_supplies} cpz4_fine_delay")
+        if tracking_replicas:
+            lines.append(f"Xfinebuf_load{index} fine_dummy_{index} fine_dummy_out_{index} vdd vss cpz4_tap_buffer")
     lines.append(".ends cpz4_dco")
     for group, (_count, width, length) in enumerate(DAC_GROUPS):
         name = f"cpz4_dac_unit_{group}"
@@ -124,11 +160,34 @@ def schematic(replica_strength=1.0):
     return "\n".join(lines)
 
 
+def dac_controls(code, destination, count, prefix, high, volts, step_s, skew_s):
+    if destination == code:
+        return [high if index < code else "0" for index in range(count)], []
+    start, stop = sorted((code, destination))
+    initial, final = (0, volts) if destination > code else (volts, 0)
+    changed = stop - start
+    switches, controls = [], []
+    for index in range(changed):
+        switched = f"{prefix}_step_{index}" if skew_s else f"{prefix}_step"
+        at = step_s + index * skew_s / max(1, changed - 1)
+        if skew_s or index == 0:
+            controls.append(f"V{switched} {switched} 0 PWL(0 {initial} {at:.10g} {initial} "
+                            f"{at + 100e-12:.10g} {final})")
+        switches.append(switched)
+    return [high] * start + switches + ["0"] * (count - stop), controls
+
+
 def make_deck(library, corner, volts, temperature, code, fine_code, aggregate=False,
-              added_tap_load_ff=0, ripple_mv=0, ripple_mhz=10):
+              added_tap_load_ff=0, ripple_mv=0, ripple_mhz=10, filtered_bias=False,
+              cold_start=False, step_to=None, step_skew_ps=0):
     high_select = "control_high" if ripple_mv else "vdd"
-    active_units = [high_select if index < code else "0" for index in range(len(THERM_PINS))]
-    fine_units = [high_select if index < fine_code else "0" for index in range(len(FINE_THERM_PINS))]
+    settle_s = BIAS_SETTLE_S if filtered_bias else RIPPLE_START_S
+    final_coarse, final_fine = step_to if step_to else (code, fine_code)
+    skew_s = step_skew_ps * 1e-12
+    active_units, coarse_control = dac_controls(code, final_coarse, len(THERM_PINS), "coarse",
+                                               high_select, volts, settle_s, skew_s)
+    fine_units, fine_control = dac_controls(fine_code, final_fine, len(FINE_THERM_PINS), "fine",
+                                           high_select, volts, settle_s, skew_s)
     loads = [f"Cload{i} {tap} 0 {(20 if i == 0 else 8) + added_tap_load_ff:g}f"
              for i, tap in enumerate(TAP_PINS)]
     loads += [f"Cfine_load{i} {tap} 0 {8 + added_tap_load_ff:g}f"
@@ -141,11 +200,16 @@ def make_deck(library, corner, volts, temperature, code, fine_code, aggregate=Fa
         instance = wrapped_line("Xosc", ("vdd", "0", "enable", *active_units, *fine_units,
                                         *TAP_PINS, *FINE_TAP_PINS), "cpz4_dco")
     supply = [f"Vdd vdd 0 {volts}"]
-    duration = "280n"
+    enable = [f"Ven enable 0 PWL(0 0 10n 0 10.1n {volts})"]
+    duration = settle_s + 80e-9
+    if cold_start:
+        duration = 2e-6
+    elif step_to:
+        duration = settle_s + skew_s + 160e-9
     if ripple_mv:
-        supply = [f"Vdd vdd 0 SIN({volts} {ripple_mv / 1000:g} {ripple_mhz:g}meg 200n)",
+        supply = [f"Vdd vdd 0 SIN({volts} {ripple_mv / 1000:g} {ripple_mhz:g}meg {settle_s:g})",
                   f"Vcontrol control_high 0 {volts}"]
-        duration = f"{0.2 + 4 / ripple_mhz:.8g}u"
+        duration = settle_s + 4e-6 / ripple_mhz
     return "\n".join([
         f"CPZ4 DCO {corner} {volts} V {temperature} C coarse {code} fine {fine_code}",
         f'.lib "{library.as_posix()}" {corner}',
@@ -153,11 +217,12 @@ def make_deck(library, corner, volts, temperature, code, fine_code, aggregate=Fa
         f".temp {temperature}",
         ".options method=gear maxord=2 reltol=0.002",
         *supply,
-        f"Ven enable 0 PWL(0 0 10n 0 10.1n {volts})" if ripple_mv else
-        f"Ven enable 0 PULSE(0 {volts} 10n 100p 100p 1u 2u)",
+        *enable,
+        *coarse_control,
+        *fine_control,
         instance,
         *loads,
-        f".tran 22p {duration} 0 22p",
+        f".tran 22p {duration:.8g} 0 22p",
         ".control",
         "run",
         "set wr_singlescale",
@@ -255,23 +320,45 @@ def characterize(path, volts):
     }
 
 
-def supply_pushing(path, volts, ripple_mv, ripple_mhz):
+def tap0_edges(path, volts):
     with path.open() as file:
         next(file)
-        samples = ((float(fields[0]), float(fields[1])) for line in file if (fields := line.split()))
-        first = next(samples)
-        rising = []
-        for second in samples:
-            if first[1] < volts / 2 <= second[1]:
+        rows = (line.split()[:2] for line in file if line.strip())
+        points = ((float(t), float(v)) for t, v in rows)
+        first = next(points)
+        for second in points:
+            rise = first[1] < volts / 2 <= second[1]
+            fall = first[1] >= volts / 2 > second[1]
+            if rise or fall:
                 edge = first[0] + (second[0] - first[0]) * (volts / 2 - first[1]) / (second[1] - first[1])
-                if edge >= 200e-9 + 1e-6 / ripple_mhz:
-                    rising.append(edge)
+                yield edge, rise
             first = second
+
+
+def characterize_transient(edges, since):
+    edges = [(time, rise) for time, rise in edges if time >= since]
+    rising = [time for time, rise in edges if rise]
+    if len(rising) < 2:
+        raise ValueError("Fewer than two rising edges in transient measurement")
+    shortest = min(b - a for a, b in zip(rising, rising[1:]))
+    widths = {True: [], False: []}
+    for (a, high), (b, next_high) in zip(edges, edges[1:]):
+        if high != next_high:
+            widths[high].append(b - a)
+    return {"first_rising_edge_ns": round((rising[0] - since) * 1e9, 3),
+            "shortest_period_ns": round(shortest * 1e9, 5),
+            "shortest_high_ns": round(min(widths[True]) * 1e9, 5),
+            "shortest_low_ns": round(min(widths[False]) * 1e9, 5),
+            "peak_frequency_mhz": round(1e-6 / shortest, 4)}
+
+
+def supply_pushing(path, volts, ripple_mv, ripple_mhz, start=RIPPLE_START_S):
+    rising = [time for time, rise in tap0_edges(path, volts) if rise and time >= start + 1e-6 / ripple_mhz]
     # Least-squares fit of instantaneous frequency to DC, sine and cosine.
     # Using both quadratures includes the phase lag of the oscillator bias.
     normal = [[0.0] * 4 for _ in range(3)]
     for a, b in zip(rising, rising[1:]):
-        phase = 2 * math.pi * ripple_mhz * 1e6 * ((a + b) / 2 - 200e-9)
+        phase = 2 * math.pi * ripple_mhz * 1e6 * ((a + b) / 2 - start)
         vector = (1.0, math.sin(phase), math.cos(phase))
         for row, lhs in zip(normal, vector):
             for index, rhs in enumerate(vector):
@@ -289,7 +376,8 @@ def supply_pushing(path, volts, ripple_mv, ripple_mhz):
     return 1000 * math.hypot(normal[1][3], normal[2][3]) / ripple_mv
 
 
-def aggregate_dac(netlist, code, fine_code, library, corner, independent_supply=False):
+def aggregate_dac(netlist, code, fine_code, library, corner, independent_supply=False,
+                  filtered_bias=False):
     """Compress parallel devices in a static code sweep. Keep the production netlist intact."""
     corner_file = library.parent / "corners" / f"{corner}.spice"
     include = next(line.split('"')[1] for line in corner_file.read_text().splitlines()
@@ -306,6 +394,7 @@ def aggregate_dac(netlist, code, fine_code, library, corner, independent_supply=
         raise ValueError("Unsupported mismatch expression in the compact DAC model")
     lines = netlist.splitlines()
     high_select = "control_high" if independent_supply else "vdd"
+    bias = "vbias" if filtered_bias else "vref"
     result = []
     index = 0
     while index < len(lines):
@@ -325,10 +414,10 @@ def aggregate_dac(netlist, code, fine_code, library, corner, independent_supply=
                 remaining -= active
                 for select, devices in ((high_select, active), ("vss", count - active)):
                     if devices:
-                        result.append(f"Xgroup{group}_{select} bp vref {select} vss cpz4_dac_unit_{group} cells={devices}")
+                        result.append(f"Xgroup{group}_{select} bp {bias} {select} vss cpz4_dac_unit_{group} cells={devices}")
             for select, devices in ((high_select, fine_code), ("vss", len(FINE_THERM_PINS) - fine_code)):
                 if devices:
-                    result.append(f"Xfine_{select} fine_bp vref {select} vss cpz4_dac_unit_0 cells={devices}")
+                    result.append(f"Xfine_{select} fine_bp {bias} {select} vss cpz4_dac_unit_0 cells={devices}")
             result.append(line)
         elif line.startswith(".subckt cpz4_dac_unit_"):
             result.append(line + " params: cells=1")
@@ -348,12 +437,14 @@ def aggregate_dac(netlist, code, fine_code, library, corner, independent_supply=
 def run_case(args, code, fine_code):
     with tempfile.TemporaryDirectory(prefix="cpz4-spice-") as name:
         path = Path(name)
-        source = schematic(args.replica_strength)
+        source = schematic(args.replica_strength, args.tracking_replicas, args.filtered_bias)
         if args.aggregate_dac:
-            source = aggregate_dac(source, code, fine_code, args.lib, args.corner, bool(args.supply_ripple_mv))
+            source = aggregate_dac(source, code, fine_code, args.lib, args.corner,
+                                   bool(args.supply_ripple_mv), args.filtered_bias)
         (path / "cpz4_dco.spice").write_text(source, encoding="ascii")
         deck = make_deck(args.lib, args.corner, args.vdd, args.temp, code, fine_code, args.aggregate_dac,
-                         args.added_tap_load_ff, args.supply_ripple_mv, args.supply_ripple_mhz)
+                         args.added_tap_load_ff, args.supply_ripple_mv, args.supply_ripple_mhz,
+                         args.filtered_bias, args.cold_start, args.step_to, args.step_skew_ps)
         (path / "bench.cir").write_text(deck, encoding="ascii")
         command = [args.ngspice, "-n", "-b", "bench.cir"]
         if args.ngspice_dll:
@@ -370,12 +461,27 @@ def run_case(args, code, fine_code):
             (args.keep_waveform / name).write_bytes(waveform.read_bytes())
         operating_point = {"corner": args.corner, "vdd": args.vdd, "temp_c": args.temp,
                            "code": code, "fine_code": fine_code}
+        settle_s = BIAS_SETTLE_S if args.filtered_bias else RIPPLE_START_S
         if args.supply_ripple_mv:
-            pushing = supply_pushing(waveform, args.vdd, args.supply_ripple_mv, args.supply_ripple_mhz)
+            pushing = supply_pushing(waveform, args.vdd, args.supply_ripple_mv, args.supply_ripple_mhz, settle_s)
             return {**operating_point, "ripple_mv_peak": args.supply_ripple_mv,
                     "ripple_mhz": args.supply_ripple_mhz, "added_tap_load_ff": args.added_tap_load_ff,
                     "supply_pushing_mhz_per_v": round(pushing, 3)}
-        return {**operating_point, **characterize(waveform, args.vdd)}
+        result = {**operating_point, **characterize(waveform, args.vdd)}
+        if args.cold_start or args.step_to:
+            edges = list(tap0_edges(waveform, args.vdd))
+            if args.cold_start:
+                result.update(characterize_transient(edges, 10e-9))
+            else:
+                # Include the cycle in flight when the code moves.
+                last_rise = max((time for time, rise in edges if rise and time < settle_s), default=None)
+                if last_rise is None:
+                    raise ValueError("The oscillator did not start before the DAC step")
+                transient = characterize_transient(edges, last_rise)
+                del transient["first_rising_edge_ns"]
+                result.update(coarse_to=args.step_to[0], fine_to=args.step_to[1],
+                              step_skew_ps=args.step_skew_ps, **transient)
+        return result
 
 
 def run_shared_library(path):
@@ -425,8 +531,18 @@ def main():
     parser.add_argument("--keep-waveform", type=Path, help="write waveform samples in this directory")
     parser.add_argument("--added-tap-load-ff", type=float, default=0,
                         help="additional capacitance on each sampled tap in fF")
-    parser.add_argument("--replica-strength", type=float, default=1.0,
-                        help="scale both replica inverter device widths for a sensitivity sweep")
+    parser.add_argument("--replica-strength", type=float,
+                        help="scale replica inverter widths, or starve widths with --tracking-replicas")
+    parser.add_argument("--tracking-replicas", action="store_true",
+                        help="use DCO-biased delay replicas with isolated sampling buffers")
+    parser.add_argument("--filtered-bias", action="store_true",
+                        help="filter the reference bias to the oscillator base current and DACs")
+    parser.add_argument("--cold-start", action="store_true",
+                        help="start from standby and measure the first edge and shortest period")
+    parser.add_argument("--step-to", type=int, nargs=2, metavar=("COARSE", "FINE"),
+                        help="measure a code transition with 100 ps DAC control edges")
+    parser.add_argument("--step-skew-ps", type=float, default=0,
+                        help="time between the first and last changing DAC pin in each bank")
     parser.add_argument("--supply-ripple-mv", type=float, default=0,
                         help="peak sine amplitude injected on the DCO supply in mV")
     parser.add_argument("--supply-ripple-mhz", type=float, default=10, help="frequency of injected supply ripple")
@@ -434,10 +550,24 @@ def main():
     args = parser.parse_args()
     if args.dll_run:
         return run_shared_library(args.dll_run.resolve())
-    if not math.isfinite(args.replica_strength) or args.replica_strength < 1:
-        parser.error("replica strength must be finite and at least one")
+    if args.replica_strength is None:
+        args.replica_strength = 2.0 if args.tracking_replicas else 1.0
+    if not math.isfinite(args.replica_strength) or args.replica_strength <= 0:
+        parser.error("replica strength must be finite and positive")
+    if not args.tracking_replicas and args.replica_strength < 1:
+        parser.error("legacy replica strength must be at least one")
+    if args.cold_start and args.supply_ripple_mv:
+        parser.error("select either cold startup or supply ripple injection")
+    if args.step_to and (args.aggregate_dac or args.cold_start or args.supply_ripple_mv):
+        parser.error("--step-to uses individual DAC devices and its own transient bench")
+    if args.step_to and not (0 <= args.step_to[0] <= 255 and 0 <= args.step_to[1] <= 128):
+        parser.error("--step-to requires a coarse code of 0..255 and a fine code of 0..128")
+    if (not math.isfinite(args.step_skew_ps) or args.step_skew_ps < 0 or
+        (args.step_skew_ps and not args.step_to)):
+        parser.error("--step-skew-ps requires --step-to and a finite nonnegative delay")
     if args.emit:
-        args.emit.write_text(schematic(args.replica_strength), encoding="ascii", newline="\n")
+        source = schematic(args.replica_strength, args.tracking_replicas, args.filtered_bias)
+        args.emit.write_text(source, encoding="ascii", newline="\n")
     if args.lib:
         args.lib = args.lib.resolve(strict=True)
         if args.ngspice_dll:

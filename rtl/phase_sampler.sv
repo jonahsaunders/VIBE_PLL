@@ -135,9 +135,15 @@ module cpz4_phase_sampler (
     end
 
     wire [11:0] falling_count = gray_to_binary(neg_sample);
+    // Bins 2 and 7 are the middle bins of their tap[0] half cycles.
+    // Compare parities there to retain two nominal intervals of margin.
+    wire positive_parity = ^pos_sample;
+    wire negative_parity = ^neg_sample;
+    wire parity_check = bin_index == 4'd2 || bin_index == 4'd7;
+    wire parity_matches = (positive_parity ^ negative_parity) == (bin_index < 4'd5);
     assign cycle_count = bin_index <= 4'd2 ? falling_count + 12'd1 :
                          bin_index <= 4'd6 ? gray_to_binary(pos_sample) : falling_count;
-    assign valid = ready_pipe[1] && legal_word;
+    assign valid = ready_pipe[1] && legal_word && (!parity_check || parity_matches);
 
     // Only the three delay replicas of the most recent coarse edge matter.
     // The replica chain inverts at stages 1 and 3. After restoring polarity,

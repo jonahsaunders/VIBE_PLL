@@ -3,7 +3,9 @@
 // Standalone logical boundary. The default build uses fixed phase centers to
 // leave area for the DCO and routing. Set ON_CHIP_CAL=1 for histogram calibration.
 module cpz4_sky130 #(
-    parameter ON_CHIP_CAL = 1'b0
+    parameter ON_CHIP_CAL = 1'b0,
+    parameter [7:0] MAX_COARSE_CODE = 8'd255,
+    parameter TRACKING_REPLICAS = 1'b0
 ) (
     input  wire        VDD_CORE,
     input  wire        VDD_DCO,
@@ -20,7 +22,9 @@ module cpz4_sky130 #(
     wire [14:0] fine_taps;
     wire osc_enable;
 
-    cpz4_pll #(.ON_CHIP_CAL(ON_CHIP_CAL)) controller(.ref_clk(ref_clk), .reset_n(ctrl[22]), .enable(ctrl[21]),
+    cpz4_pll #(.ON_CHIP_CAL(ON_CHIP_CAL), .MAX_COARSE_CODE(MAX_COARSE_CODE),
+              .TRACKING_REPLICAS(TRACKING_REPLICAS)) controller(
+                       .ref_clk(ref_clk), .reset_n(ctrl[22]), .enable(ctrl[21]),
                        .cfg_toggle(ctrl[20]), .cfg_addr(ctrl[19:17]), .cfg_data(ctrl[16:0]),
                        .dco_tap(taps), .dco_fine_tap(fine_taps), .dco_enable(osc_enable),
                        .dco_therm(therm), .dco_fine_therm(fine_therm),

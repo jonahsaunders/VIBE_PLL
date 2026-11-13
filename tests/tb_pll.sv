@@ -1,7 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 `timescale 1ps/1fs
 
-module tb_pll #(parameter ON_CHIP_CAL = 1'b1);
+module tb_pll #(
+    parameter ON_CHIP_CAL = 1'b1,
+    parameter TRACKING_REPLICAS = 1'b0,
+    parameter [7:0] MAX_COARSE_CODE = 8'd255
+);
     reg ref_clk = 0, ref_running = 1;
     reg reset_n = 1, enable = 0, cfg_toggle = 0;
     reg [2:0] cfg_addr = 0;
@@ -15,7 +19,9 @@ module tb_pll #(parameter ON_CHIP_CAL = 1'b1);
     wire [127:0] fine_therm;
     wire [11:0] status;
 
-    cpz4_pll #(.ON_CHIP_CAL(ON_CHIP_CAL)) dut(ref_clk, reset_n, enable, cfg_toggle, cfg_addr, cfg_data, taps, fine_ring,
+    cpz4_pll #(.ON_CHIP_CAL(ON_CHIP_CAL), .TRACKING_REPLICAS(TRACKING_REPLICAS),
+              .MAX_COARSE_CODE(MAX_COARSE_CODE))
+        dut(ref_clk, reset_n, enable, cfg_toggle, cfg_addr, cfg_data, taps, fine_ring,
                  dco_enable, therm, fine_therm, clk_out, clk_mon, status);
 
     real ref_mhz = 25.0;
@@ -37,6 +43,28 @@ module tb_pll #(parameter ON_CHIP_CAL = 1'b1);
     integer applied_code, applied_fine;
     always @* applied_code = $countones(therm);
     always @* applied_fine = $countones(fine_therm);
+
+    reg [11:0] replay_lut [0:39];
+    wire [11:0] replay_center = dut.fine_bin < 6'd40 ? replay_lut[dut.fine_bin] : 12'd0;
+    wire [11:0] replay_read_center = cfg_data[5:0] < 6'd40 ? replay_lut[cfg_data[5:0]] : 12'd0;
+
+    initial begin : load_replay_lut
+        string path;
+        integer file, bin_id, center;
+        if ($value$plusargs("phase_lut=%s", path)) begin
+            if (ON_CHIP_CAL) $fatal(1, "Replay LUT requires the fixed-center build");
+            file = $fopen(path, "r");
+            if (file == 0) $fatal(1, "Could not open the replay phase LUT");
+            for (bin_id = 0; bin_id < 40; bin_id = bin_id + 1) begin
+                if ($fscanf(file, "%h", center) != 1 || center < 0 || center > 4095)
+                    $fatal(1, "Bad replay phase LUT center at bin %d", bin_id);
+                replay_lut[bin_id] = center[11:0];
+            end
+            $fclose(file);
+            force dut.fine_center = replay_center;
+            force dut.read_center = replay_read_center;
+        end
+    end
 
     initial begin
         throwaway = $value$plusargs("ref=%f", ref_mhz);
@@ -236,6 +264,7 @@ module tb_pll #(parameter ON_CHIP_CAL = 1'b1);
 
     real started, lost_us, hold_start, last_edge_ps, edge_mhz;
     integer initial_ratio, retune_ratio, value_unused, ref_bound, requested_gear, expected_calibration;
+    integer expected_tracking_replicas;
     integer spectrum_edges, spectrum_settle;
     reg [16:0] auto_mode;
     integer cal_code, test_ceiling;
@@ -260,6 +289,9 @@ module tb_pll #(parameter ON_CHIP_CAL = 1'b1);
         if ($value$plusargs("expected_calibration=%d", expected_calibration) &&
             expected_calibration != int'(ON_CHIP_CAL))
             $fatal(1, "The testbench was compiled for a different calibration mode");
+        if ($value$plusargs("expected_tracking_replicas=%d", expected_tracking_replicas) &&
+            expected_tracking_replicas != int'(TRACKING_REPLICAS))
+            $fatal(1, "The testbench was compiled for a different phase detector");
         value_unused = $value$plusargs("startup_delay_ps=%f", startup_delay_ps);
         value_unused = $value$plusargs("start_n=%d", initial_ratio);
         value_unused = $value$plusargs("retune_n=%d", retune_ratio);
@@ -276,6 +308,21 @@ module tb_pll #(parameter ON_CHIP_CAL = 1'b1);
         repeat (5) @(negedge ref_clk);
         reset_n = 1;
         repeat (5) @(negedge ref_clk);
+        if ($test$plusargs("check_hard_ceiling")) begin
+            if (MAX_COARSE_CODE != 8'd96) $fatal(1, "Expected test hard ceiling of 96");
+            transact(3'd5, 17'd6);
+            if (status[7:0] != 8'd96) $fatal(1, "Reset ignored the hard ceiling");
+            transact(3'd2, 17'h10061);
+            if (!status[11]) $fatal(1, "Ceiling command accepted an out-of-range code");
+            transact(3'd5, 17'd6);
+            if (status[7:0] != 8'd96) $fatal(1, "Rejected command changed the ceiling");
+            transact(3'd2, 17'd4);
+            transact(3'd2, 17'h10050);
+            transact(3'd5, 17'd6);
+            if (status[11] || status[7:0] != 8'd80) $fatal(1, "Lower ceiling was not applied");
+            $display("PASS hard ceiling: reset, rejected raise, accepted lower value");
+            $finish;
+        end
         ref_bound = $rtoi($ceil(ref_mhz));
         transact(3'd2, 17'h10100 + 17'(ref_bound));
         if ($value$plusargs("code_ceiling=%d", test_ceiling))
@@ -309,7 +356,7 @@ module tb_pll #(parameter ON_CHIP_CAL = 1'b1);
         acquire("fractional_default", started);
         measure_frequency(ref_mhz * initial_ratio / 4096.0);
         transact(3'd5, 17'd12);
-        if (status[1:0] !== {auto_mode[12], auto_mode[11] && !ON_CHIP_CAL})
+        if (status[2:0] !== {TRACKING_REPLICAS, auto_mode[12], auto_mode[11] && !ON_CHIP_CAL})
             $fatal(1, "Incorrect phase profile or narrow tracking readback");
         if ($value$plusargs("spectrum=%s", spectrum_path)) begin
             spectrum_file = $fopen(spectrum_path, "w");

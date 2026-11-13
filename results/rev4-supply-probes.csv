@@ -1,0 +1,3 @@
+topology,corner,vdd,temp_c,code,fine_code,ripple_mv_peak,ripple_mhz,added_tap_load_ff,supply_pushing_mhz_per_v
+legacy,tt,1.8,25.0,52,64,10.0,2.0,0,139.018
+filtered_bias,tt,1.8,25.0,52,64,10.0,2.0,0,55.053

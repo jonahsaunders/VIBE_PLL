@@ -44,6 +44,7 @@ module cpz4_loop_control (
     reg [2:0] measurement;
     reg [3:0] settle_left;
     reg [4:0] measure_left;
+    reg [1:0] startup_retries;
     reg [10:0] acquire_ticks;
     reg [23:0] anchor;
     reg [17:0] fine_low_measure;
@@ -181,6 +182,7 @@ module cpz4_loop_control (
             measurement      <= LOW_RAIL;
             settle_left      <= 0;
             measure_left     <= 0;
+            startup_retries  <= 0;
             acquire_ticks    <= 0;
             anchor           <= 0;
             fine_low_measure <= 0;
@@ -243,6 +245,7 @@ module cpz4_loop_control (
                         fault_code     <= 0;
                         gain_q12       <= 0;
                         acquire_ticks  <= 0;
+                        startup_retries <= 0;
                         monitor_active <= 0;
                         fine_retried   <= 0;
                         extended_fine  <= 0;
@@ -261,8 +264,17 @@ module cpz4_loop_control (
                 MEASURE: begin
                     if (measure_left != 0) measure_left <= measure_left - 5'd1;
                     else if (!phase_valid) state <= SETTLE;
-                    else if (measurement == LOW_RAIL && speed_upper < MIN_RUNNING)
-                        trip(START_STALLED);
+                    else if (measurement == LOW_RAIL && speed_upper < MIN_RUNNING) begin
+                        // The filtered DCO bias can produce valid taps before
+                        // its startup frequency settles. Recheck code zero
+                        // while retaining the acquisition timeout and guard.
+                        if (&startup_retries) trip(START_STALLED);
+                        else begin
+                            startup_retries <= startup_retries + 2'd1;
+                            anchor <= phase_q12;
+                            measure_left <= 5'd31;
+                        end
+                    end
                     else if (speed_upper > (measurement <= SEARCH ? COARSE_LIMIT : CLOCK_LIMIT))
                         trip(SPEED_GUARD);
                     else if (accumulate_fine && fine_windows != 2'd3) begin
