@@ -137,9 +137,18 @@ if {$detailed || $global_only} {
         write_def [file join $out routed.def]
         write_db [file join $out routed.odb]
         write_verilog [file join $out routed.v]
-        check_antennas -report_file [file join $out antenna.rpt]
+        set connected [design_is_routed -verbose]
+        set antenna [check_antennas -report_file [file join $out antenna.rpt]]
+        set report [open [file join $out route-checks.txt] w]
+        puts $report "All signal nets routed: $connected"
+        puts $report "Antenna-violating nets: $antenna"
+        close $report
+        set grid_ok 1
         foreach net {VDD_CORE VDD_DCO VSS} {
-            check_power_grid -net $net
+            if {[catch {check_power_grid -net $net} reason]} {
+                puts "Power-grid check failed for $net ($reason)"
+                set grid_ok 0
+            }
         }
         if {[info exists ::env(RCX_RULES)]} {
             extract_parasitics -ext_model_file $::env(RCX_RULES)
@@ -151,5 +160,8 @@ if {$detailed || $global_only} {
         report_worst_slack -max
         report_worst_slack -min
         report_tns
+        if {!$connected || !$grid_ok || $route_violations != 0 || $antenna != 0} {
+            error "Standalone connectivity, routing, or antenna checks failed"
+        }
     }
 }

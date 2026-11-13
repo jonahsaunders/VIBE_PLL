@@ -19,6 +19,9 @@ export DCO_LEF="$build/cpz4_dco.lef"
 export MAPPED_VERILOG="$build/cpz4_sky130.v"
 export OUT_DIR="$build"
 export RUN_DETAIL_ROUTE=1
+if [[ -z ${RCX_RULES:-} && -r "$platform/rcx_patterns.rules" ]]; then
+    export RCX_RULES="$platform/rcx_patterns.rules"
+fi
 
 "$python" "$root/physical/layout_dco.py" --output "$build"
 if [[ -n "${SKY130A:-}" ]]; then
@@ -27,7 +30,7 @@ fi
 "$python" "$root/tests/check_slot.py" --liberty "$LIBERTY" --lef "$CELLS_LEF" \
     --slot 400 250 --dco-reserve 138 113 --edge-reserve 5 --utilization 0.65 \
     --mapped-netlist "$MAPPED_VERILOG" | tee "$build/area.log"
-"$openroad" -exit "$root/physical/floorplan.tcl" 2>&1 | tee "$build/openroad.log"
+"$openroad" -threads 4 -exit "$root/physical/floorplan.tcl" 2>&1 | tee "$build/openroad.log"
 test -s "$build/routed.def"
 test -s "$build/routed.odb"
 if [[ $(cat "$build/route-violations.txt") != 0 ]]; then
