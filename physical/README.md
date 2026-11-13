@@ -18,10 +18,10 @@ The KLayout check uses open_pdks Sky130A revision
 fa87f8f4bbcc7255b6f0c0fb506960f531ae2392. The wrapper normalizes the LVS
 reader's casing and preserves the explicit resistor and capacitor parameters.
 The layout passes the deck's enabled front-end, back-end and grid checks and
-matches the 870-device schematic. The DCO netlist extracted for LVS oscillated
-at 254.044 MHz at TT, 1.8 V, 25 °C, coarse code 52 and fine code 64 using the
-schematic bench loads. That simulation includes extracted device geometry and
-omits interconnect parasitics.
+matches the 870-device schematic. The layout uses a folded stage order to
+shorten the ring interconnect and distributes the DAC input pins across the
+upper routing layers. The CI extraction includes capacitance and uses the
+original schematic bench loads. See the measured operating points below.
 
 To run the capacitance-extracted bench, run Magic in the directory that
 contains cpz4_dco.gds, with PDK_ROOT set to the installed PDK parent.
@@ -53,12 +53,47 @@ OpenROAD image and publishes the build outputs for review. OpenROAD reads
 the mapped controller, places the DCO, inserts substrate taps and
 standard-cell power rails, builds the clock trees and runs signal routing.
 The stream-out script combines the routed DEF with the standard-cell and DCO
-GDS views. Set RCX_RULES to use an external RCX rule file.
+GDS views. The script uses the platform's RCX rules when available.
+Set RCX_RULES to supply a different rule file.
 
-The row-area check measures the mapped cells before tap cells, tie fanout
-repair and clock tree synthesis. Review routed timing, CDC and tap loading
-against [standalone.sdc](standalone.sdc) and the
-[load sensitivity results](../results/rev3.md).
+The Linux build maps 5,992 cells and occupies 49,977.93 µm². It uses 64.49%
+of the 77,494.32 µm² of digital rows in the planning model. The row-area
+check measures the mapped cells before tap insertion and clock tree synthesis.
+The mapped controller uses fixed phase centers. Refer to
+[standalone.sdc](standalone.sdc) and the [load sensitivity results](../results/rev3.md)
+when reviewing timing, CDC and tap loading.
+
+## Physical verification
+
+The checked-in oscillator layout uses a folded ring. The folding reduced
+the largest extracted ring-node interconnect capacitance from 40.48 fF to
+19.65 fF in the matched extraction experiment. That comparison uses the
+same transistor schematic and five explicit MIM capacitors.
+
+The oscillator passed both the enabled KLayout geometry checks and Magic
+`drc(full)` with zero markers. KLayout LVS matched the schematic. The GDS
+from Linux and Windows has the same SHA-256,
+`ead7d89d68cd50b798ee1402250d4c88fe9066a37403a813827fa2feb35d2352`.
+
+| Corner and bench conditions | Coarse:fine code | Frequency | Missing fine bins |
+| --- | ---: | ---: | ---: |
+| TT, 1.80 V, 25 °C | 52:64 | 117.65 MHz | 0 of 40 |
+| TT, 1.80 V, 25 °C | 255:128 | 348.66 MHz | 11 of 40 |
+| SS, 1.62 V, 0 °C | 255:128 | 179.41 MHz | 8 of 40 |
+
+The capacitance-extracted DCO falls short of the 300 MHz target at SS.
+The tests use fixed DAC codes and lumped bench loads on the taps.
+[Oscillator layout and simulation outputs](https://github.com/jonahsaunders/VIBE_PLL/actions/runs/43351731743/artifacts/14004726090)
+
+A 900 ns slow-corner transient on the preceding folded layout measured
+35.82 MHz at the controller's initial coarse:fine setting of 0:64. The
+existing startup guard requires 48 MHz. That is an additional bring-up
+check for the next extracted characterization.
+
+The compact RTL passed 12 corner replays with a maximum 74.625 µs lock or
+relock time using schematic-based frequency and phase tables. The extracted
+oscillator needs a new plant table and closed-loop replay after tuning
+closure.
 
 ## Harness integration
 
