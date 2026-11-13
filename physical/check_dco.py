@@ -23,12 +23,20 @@ def normalize_lvs(source, target):
         text = text.replace(line, "super(s, element)")
     # The packaged deck recognizes N+ substrate diodes only inside a
     # closed local tap ring. Standard-cell antenna diodes instead use the
-    # row's shared substrate taps. Use the physical substrate for the anode,
-    # as in the newer upstream Sky130 deck, while keeping the independently
-    # derived N+ diffusion and its connected cathode layer. No diode,
-    # parameter, or connection is removed from comparison.
+    # row's shared substrate taps. The older deck's "sub" is an initially
+    # empty terminal-output layer, not physical substrate geometry. Derive
+    # the P-side body outside wells and emit its anode onto that existing
+    # substrate terminal layer, just as the deck's NFET extractor does.
+    # N+ diffusion, junction dimensions, and both connections remain checked.
     ring_rule = "ndiode_terminal_p = ptap_conn.holes.interacting(ndiode_terminal_n)"
     if ring_rule in text:
+        if "sub = polygon_layer" not in text:
+            raise ValueError("Unexpected packaged substrate terminal definition")
+        junction = 'logger.info("Starting DIODE EXTRACTION")'
+        if junction not in text:
+            raise ValueError("Missing diode extraction section")
+        text = text.replace(junction, junction +
+                            "\nndiode_substrate = extent.not(nwell).not(dnwell).not(pwell_res)", 1)
         pattern = re.compile(
             r'^extract_devices\(diode\("(sky130_fd_pr__diode_pw2nd_[^"]+)", Diode\),.*$', re.M)
         def substrate_diode(match):
@@ -36,7 +44,7 @@ def normalize_lvs(source, target):
             if cathode is None:
                 raise ValueError("Missing substrate-diode cathode region")
             return (f'extract_devices(diode("{match[1]}", Diode), '
-                    '{ "P" => sub, "N" => ' + cathode[1]
+                    '{ "P" => ndiode_substrate, "N" => ' + cathode[1]
                     + ', "tA" => sub, "tC" => ndiode_terminal_n})')
         text, count = pattern.subn(substrate_diode, text)
         if count != 4:

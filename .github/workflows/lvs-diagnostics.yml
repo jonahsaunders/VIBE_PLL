@@ -39,7 +39,7 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           path = Path("build/inspect/sky130-portable.lvs")
-          print("ACTUAL PINNED DECK DIODE RULES")
+          print("ACTUAL PINNED DECK SUBSTRATE RULES")
           for number, line in enumerate(path.read_text().splitlines(), 1):
               if (920 <= number <= 1000) or (1600 <= number <= 1660) or ("sub" in line and ("=" in line or "connect" in line)) or "class Diode" in line:
                   print(number, line)
