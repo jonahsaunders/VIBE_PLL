@@ -58,6 +58,21 @@ def main():
         for graph in ("netlist", "schematic"):
             text = text.replace(graph + ".simplify", graph + ".purge\n" +
                                 graph + ".combine_devices\n" + graph + ".purge_nets")
+        # Include physical-junction diagnostics without changing extraction.
+        junction = 'logger.info("Starting DIODE EXTRACTION")'
+        if junction not in text:
+            raise ValueError("Expected the Sky130 diode extraction section")
+        text = text.replace(junction, junction + """
+logger.info("JUNCTION GEOMETRY ncomp=#{ncomp.area} marker=#{areaid_de.area} ndiode=#{ndiode_5v0_terminal_n.area} sub=#{sub.area} overlap=#{(ndiode_5v0_terminal_n & sub).area}")
+""", 1)
+        before_flatten = "netlist.make_top_level_pins"
+        counts = """
+junction_counts = Hash.new(0)
+netlist.each_circuit { |c| c.each_device { |d| junction_counts[d.device_class.name] += 1 } }
+logger.info("JUNCTION RAW DEVICES #{junction_counts.inspect}")
+"""
+        text = text.replace(before_flatten, counts + before_flatten, 1)
+        text = text.replace("netlist.flatten", "netlist.flatten" + counts.replace("RAW", "FLATTENED"), 1)
         deck.write_text(text)
         run(a.klayout, build, "pll-lvs", deck,
             {"input": layout, "schematic": reference, "report": build / "pll-lvs.lvsdb",
