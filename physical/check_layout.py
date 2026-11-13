@@ -4,6 +4,7 @@
 import argparse
 import hashlib
 import json
+import re
 from pathlib import Path
 import xml.etree.ElementTree as ET
 from check_dco import normalize_lvs, run
@@ -58,6 +59,15 @@ def main():
         for graph in ("netlist", "schematic"):
             text = text.replace(graph + ".simplify", graph + ".purge\n" +
                                 graph + ".combine_devices\n" + graph + ".purge_nets")
+        # Explicitly form each substrate-junction overlap while retaining
+        # its anode on the shared substrate. These are the same P/N regions
+        # and A/P measurements, with terminal geometry stated separately.
+        text, count = re.subn(
+            r'"P"\s*=>\s*sub\s*,\s*"N"\s*=>\s*(ndiode_\w+)',
+            lambda m: ('"P" => (sub & ' + m[1] + '), "N" => ' + m[1]
+                       + ', "tA" => sub, "tC" => ' + m[1]), text)
+        if count != 4:
+            raise ValueError("Expected four Sky130 substrate-diode extractors")
         # Include physical-junction diagnostics without changing extraction.
         junction = 'logger.info("Starting DIODE EXTRACTION")'
         if junction not in text:

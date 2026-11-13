@@ -54,6 +54,7 @@ jobs:
         if: always()
         run: |
           cat build/inspect/physical-verification.json
+          grep 'JUNCTION' build/inspect/pll-lvs.log || true
           tail -40 build/inspect/pll-lvs.log
           "$RUNNER_TEMP/lvs-inspect/bin/python" physical/diagnose_lvs.py build/inspect/pll-lvs.lvsdb
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
