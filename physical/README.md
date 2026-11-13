@@ -96,17 +96,30 @@ closure.
 
 ## Routing status
 
-The first run to clear macro pin access reached detailed routing after
-global routing reported 97 overflow units. It completed three detailed
-passes with 15,811, 13,137, and 12,195 violations. The runner reached its
-35-minute limit during the next pass. The artifact contains the placed DEF,
-clock trees, power routes, guides, and congestion reports.
-[OpenROAD run and placement outputs](https://github.com/jonahsaunders/VIBE_PLL/actions/runs/43351731743/artifacts/14006007096)
+OpenROAD completed detailed routing on the 400 × 250 µm standalone die.
+The router reports guides converted to connected routes for all signal nets.
+Its route report has 8,201 violations, including 6,610 short markers, and
+46 nets failed its antenna check. PDNSim found connected shapes for VDD_CORE,
+VDD_DCO, and VSS. These individual power checks do not detect shorts to
+other nets. The emitted GDS has 1,472 markers from the enabled KLayout
+front-end, back-end, and grid checks.
 
-The CI route uses a bounded detailed-routing pass to publish a review layout
-when the router finishes with violations. For the complete local run,
-leave DETAIL_ROUTE_ITERATIONS unset. The review layout is labeled
-`cpz4_sky130-review.gds` when any configured route checks fail.
+The routed TT report uses extracted parasitics and gives −17.07 ns worst
+setup slack and +0.14 ns worst hold slack. These values are diagnostic
+because the layout still has routing violations.
+
+[Review GDS, routed DEF, ODB, SPEF, and OpenROAD reports](https://github.com/jonahsaunders/VIBE_PLL/actions/runs/43355209114/artifacts/14006911490)
+
+The longer optimization run reached 6,290 violations before the
+35-minute job limit. Its artifact has placement, clock trees, power
+routes, guides, and congestion reports.
+[Longer optimization run](https://github.com/jonahsaunders/VIBE_PLL/actions/runs/43353287680/job/131649211153)
+
+CI limits the number of detailed-routing iterations to publish a review
+layout and violation report within the hosted runner's time budget.
+For a longer local run, leave DETAIL_ROUTE_ITERATIONS unset.
+When routing or connectivity checks fail, the output is named
+`cpz4_sky130-review.gds`. This layout has open sign-off items.
 
 ## Harness integration
 
