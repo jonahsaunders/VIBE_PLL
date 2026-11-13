@@ -37,9 +37,18 @@ def main():
         summary["drc_markers"] = len(ET.parse(report).findall("./items/item"))
         deck = build / "sky130-portable.lvs"
         normalize_lvs(decks / "lvs/sky130.lvs", deck)
+        # Flatten both connectivity graphs after hierarchical device
+        # extraction. This checks real supply/tie-cell pin equivalences
+        # across boundaries without treating the cells as black boxes.
+        text = deck.read_text()
+        section = "#=== FLATTEN CELLS ===\nalign"
+        if section not in text:
+            raise ValueError("Expected the Sky130 hierarchy alignment section")
+        deck.write_text(text.replace(section, "#=== FLATTEN CELLS ===\nnetlist.flatten\nschematic.flatten\nalign", 1))
         run(a.klayout, build, "pll-lvs", deck,
             {"input": layout, "schematic": reference, "report": build / "pll-lvs.lvsdb",
-             "target_netlist": build / "pll-extracted.spice", "lvs_sub": "vss", "thr": 4})
+             "target_netlist": build / "pll-extracted.spice", "lvs_sub": "vss",
+             "schematic_simplify": "true", "thr": 4})
         summary["lvs_match"] = "Netlists match." in (build / "pll-lvs.log").read_text()
         route_drc = int((build / "route-violations.txt").read_text().strip())
         route_checks = (build / "route-checks.txt").read_text()

@@ -124,10 +124,7 @@ if {$detailed || $global_only} {
     report_checks -path_delay min_max -group_path_count 5
     source [file join $here capture_paths.tcl]
     if {$detailed} {
-        if {![file exists [file join $out congestion.rpt]] ||
-            [file size [file join $out congestion.rpt]] == 0} {
-            repair_antennas sky130_fd_sc_hd__diode_2
-        }
+        repair_antennas sky130_fd_sc_hd__diode_2 -iterations 5 -ratio_margin 30
         detailed_placement
         global_connect
         set detail_args [list -output_drc [file join $out route-drc.rpt] \
@@ -136,6 +133,16 @@ if {$detailed || $global_only} {
             lappend detail_args -droute_end_iter $::env(DETAIL_ROUTE_ITERATIONS)
         }
         detailed_route {*}$detail_args
+        # Detailed routing can lengthen wires beyond the global estimate.
+        # Repair the actual routed antenna failures and route the new diodes
+        # before filler insertion; every iteration is checked again.
+        set antenna [check_antennas]
+        for {set iteration 0} {$antenna != 0 && $iteration < 4} {incr iteration} {
+            repair_antennas sky130_fd_sc_hd__diode_2 -diode_only -iterations 1 -ratio_margin 30
+            global_connect
+            detailed_route {*}$detail_args
+            set antenna [check_antennas]
+        }
         set route_violations [detailed_route_num_drvs]
         filler_placement {
             sky130_fd_sc_hd__fill_8 sky130_fd_sc_hd__fill_4

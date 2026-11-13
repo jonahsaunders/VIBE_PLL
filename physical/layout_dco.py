@@ -240,6 +240,10 @@ class Layout:
         lines += ["  OBS", "    LAYER li1 ;", f"      RECT 0 0 {self.width / 1000:g} {self.height / 1000:g} ;"]
         for metal in ("met1", "met2", "met3", "met4", "met5"):
             metal_region = db.Region(self.cell.shapes(self.layers[metal]))
+            # Internal lower-layer whitespace is not a routing channel. In
+            # particular, an access wire must not squeeze beside a tap trunk.
+            if metal in ("met1", "met2", "met3"):
+                metal_region = db.Region(db.Box(0, 0, self.width, self.height))
             pins = [db.Box(*box) for name, shapes in self.pins.items()
                     for layer, box in shapes if layer == metal and
                     (name not in ("vdd", "vss") or metal == "met5")]
@@ -252,6 +256,17 @@ class Layout:
                 box = polygon.bbox()
                 lines.append(f"      RECT {box.left / 1000:g} {box.bottom / 1000:g} "
                              f"{box.right / 1000:g} {box.top / 1000:g} ;")
+        # Cut-layer obstructions prevent a router via from overlapping a
+        # pre-existing analog via, even when their metal enclosures touch.
+        for cut, lef_layer in (("via1", "via"), ("via2", "via2"),
+                               ("via3", "via3"), ("via4", "via4")):
+            region = db.Region(self.cell.shapes(self.layers[cut]))
+            if not region.is_empty():
+                lines.append(f"    LAYER {lef_layer} ;")
+                for polygon in region.each():
+                    box = polygon.bbox()
+                    lines.append("      RECT " + " ".join(f"{v / 1000:g}" for v in
+                                 (box.left, box.bottom, box.right, box.top)) + " ;")
         lines += ["  END", f"END {TOP}", "END LIBRARY", ""]
         (output / f"{TOP}.lef").write_text("\n".join(lines), encoding="utf-8", newline="\n")
 
