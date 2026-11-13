@@ -3,6 +3,13 @@
 gds read cpz4_dco.gds
 load cpz4_dco
 select top cell
+drc style drc(full)
+drc check
+drc catchup
+set report [open dco-magic-drc.txt w]
+puts $report [drc listall count]
+close $report
+puts "DCO Magic DRC markers: [drc listall count total]"
 extract all
 ext2spice lvs
 ext2spice subcircuit on

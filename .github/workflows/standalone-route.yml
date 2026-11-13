@@ -9,6 +9,60 @@ permissions:
   contents: read
 
 jobs:
+  oscillator:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Build headless Magic and install the Sky130A models
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq tcl-dev ngspice zstd
+          mkdir -p "$RUNNER_TEMP/magic-src" "$RUNNER_TEMP/sky130"
+          curl -fsSL --retry 3 \
+            https://codeload.github.com/RTimothyEdwards/magic/tar.gz/8d37ad4cb49a839eb3e32016f1c06e9bca20d8ef \
+            | tar xz --strip-components=1 -C "$RUNNER_TEMP/magic-src"
+          (
+            cd "$RUNNER_TEMP/magic-src"
+            ./configure --prefix="$RUNNER_TEMP/magic" --disable-readline \
+              --without-x --without-opengl --without-cairo --without-tk
+            make -j4
+            make install
+          ) > "$RUNNER_TEMP/magic-build.log" 2>&1 || {
+            tail -80 "$RUNNER_TEMP/magic-build.log"
+            exit 1
+          }
+          release=https://github.com/chipfoundry/volare/releases/download/sky130-fa87f8f4bbcc7255b6f0c0fb506960f531ae2392
+          for asset in common sky130_fd_pr; do
+            curl -fsSL --retry 3 "$release/$asset.tar.zst" | tar --zstd -x -C "$RUNNER_TEMP/sky130"
+          done
+      - name: Extract and replay the nominal oscillator
+        run: |
+          mkdir -p build/oscillator
+          python3 -m venv "$RUNNER_TEMP/vibe-oscillator"
+          python="$RUNNER_TEMP/vibe-oscillator/bin/python"
+          "$python" -m pip install klayout==0.30.13
+          "$python" physical/layout_dco.py --output build/oscillator
+          export PDK_ROOT="$RUNNER_TEMP/sky130"
+          export PATH="$RUNNER_TEMP/magic/bin:$PATH"
+          (
+            cd build/oscillator
+            magic -dnull -noconsole -rcfile "$PDK_ROOT/sky130A/libs.tech/magic/sky130A.magicrc" \
+              "$GITHUB_WORKSPACE/physical/extract_dco.tcl"
+          ) 2>&1 | tee build/oscillator/magic-pex.log
+          test -s build/oscillator/cpz4_dco_pex.spice
+          "$python" spice/dco_deck.py --lib "$PDK_ROOT/sky130A/libs.tech/ngspice/sky130.lib.spice" \
+            --netlist build/oscillator/cpz4_dco_pex.spice --codes 52 --fine-codes 64 \
+            --output build/oscillator/pex-tt.csv
+      - name: Upload oscillator extraction
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: sky130-oscillator
+          path: build/oscillator
+          if-no-files-found: warn
   route:
     runs-on: ubuntu-24.04
     timeout-minutes: 35
@@ -16,33 +70,13 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           persist-credentials: false
-      - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
-        id: openroad-cache
-        with:
-          path: /tmp/vibe-openroad.tar
-          key: openroad-orfs-linux-amd64-73275384ed91270
-      - name: Load pinned OpenROAD image
-        run: |
-          image=openroad/orfs@sha256:73275384ed91270ea0e5f47710b3c2ff1b91708440c0744208ff226b751f88a0
-          if [[ -f /tmp/vibe-openroad.tar ]]; then
-            docker load -i /tmp/vibe-openroad.tar
-          else
-            docker pull "$image"
-            docker tag "$image" vibe-openroad:standalone
-            docker save vibe-openroad:standalone -o /tmp/vibe-openroad.tar
-          fi
-      - uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
-        if: steps.openroad-cache.outputs.cache-hit != 'true'
-        with:
-          path: /tmp/vibe-openroad.tar
-          key: openroad-orfs-linux-amd64-73275384ed91270
       - name: Route standalone PLL
         run: |
           mkdir -p build/standalone
           docker run --rm --platform linux/amd64 \
             --volume "$GITHUB_WORKSPACE:/project" --workdir /project \
             --entrypoint /bin/bash \
-            vibe-openroad:standalone \
+            openroad/orfs@sha256:73275384ed91270ea0e5f47710b3c2ff1b91708440c0744208ff226b751f88a0 \
             -lc 'export PATH="/OpenROAD-flow-scripts/tools/install/OpenROAD/bin:/OpenROAD-flow-scripts/tools/install/yosys/bin:$PATH";
                  if ! command -v openroad; then
                    binary=$(find /OpenROAD-flow-scripts /opt /usr/local -type f -name openroad -print -quit);

@@ -397,11 +397,11 @@ def draw_core(layout, devices, start_y):
 
     resistor = devices.pop("r_ref")
     p_tap_y, n_tap_y = HEIGHT - 850, n_top + 780
-    for body_x in (4_250, 24_500, 45_300, 68_000, 90_900, 122_100):
+    for body_x in range(4_250, 124_251, 10_000):
         layout.body_tap(body_x, p_tap_y, True)
         layout.body_tap(body_x, n_tap_y, False)
     layout.wire("met1", (4_250, p_tap_y), (VDD_X, p_tap_y), 480)
-    layout.wire("met1", (VSS_X, n_tap_y), (122_100, n_tap_y), 480)
+    layout.wire("met1", (VSS_X, n_tap_y), (124_250, n_tap_y), 480)
     layout.stack(1, 4, (VDD_X, p_tap_y))
     layout.stack(1, 4, (VSS_X, n_tap_y))
     append("vdd", 4, (VDD_X, p_tap_y))
