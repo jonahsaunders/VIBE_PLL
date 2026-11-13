@@ -26,6 +26,16 @@ if {[info exists ::env(CORE_AREA)]} { set core $::env(CORE_AREA) }
 initialize_floorplan -site unithd -die_area $die -core_area $core
 
 set block [ord::get_db_block]
+# OpenSTA can retain a synthetic constant net even after synthesis mapped
+# every sink to a tie cell. Drop only nets with no terminals or routing.
+foreach name {zero_ one_} {
+    set net [$block findNet $name]
+    if {$net ne "NULL" && [llength [$net getITerms]] == 0 &&
+        [llength [$net getBTerms]] == 0 && [$net getWire] eq "NULL" &&
+        [llength [$net getSWires]] == 0} {
+        odb::dbNet_destroy $net
+    }
+}
 set dco [$block findInst oscillator]
 if {$dco eq "NULL"} { error "The mapped netlist must instantiate oscillator" }
 set master [$dco getMaster]
