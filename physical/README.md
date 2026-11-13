@@ -85,8 +85,7 @@ The capacitance-extracted DCO falls short of the 300 MHz target at SS.
 The tests use fixed DAC codes and lumped bench loads on the taps.
 [Oscillator layout and simulation outputs](https://github.com/jonahsaunders/VIBE_PLL/actions/runs/43351731743/artifacts/14004726090)
 
-A 900 ns slow-corner transient on the preceding folded layout measured
-35.82 MHz at the controller's initial coarse:fine setting of 0:64. The
+A 900 ns slow-corner transient on this layout measured 35.72 MHz at the controller's initial coarse:fine setting of 0:64. The
 existing startup guard requires 48 MHz. That is an additional bring-up
 check for the next extracted characterization.
 

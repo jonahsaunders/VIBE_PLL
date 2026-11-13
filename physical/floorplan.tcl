@@ -96,10 +96,12 @@ if {$detailed || $global_only} {
         connect_dco_supply $block $dco $dbu
     }
     place_pins -hor_layers met3 -ver_layers met2
+    set_routing_layers -signal met1-met5 -clock met3-met5
+    # Reserve track capacity around the standard-cell pins and power rails.
+    set_global_routing_layer_adjustment met1-met5 0.2
     global_placement -routability_driven -density 0.65
     detailed_placement
     check_placement -verbose
-    set_routing_layers -signal met1-met5 -clock met2-met5
     if {$detailed} {
         if {[info exists ::env(SKY130_SET_RC)]} { source $::env(SKY130_SET_RC) }
         global_connect
