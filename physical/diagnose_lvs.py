@@ -27,6 +27,12 @@ def main():
     args = p.parse_args()
     lvs = db.LayoutVsSchematic()
     lvs.read(args.report)
+    for label, netlist in (("LAYOUT", value(lvs, "netlist")), ("REFERENCE", value(lvs, "reference"))):
+        classes = Counter()
+        for circuit in netlist.each_circuit():
+            for device in circuit.each_device():
+                classes[value(value(device, "device_class"), "name")] += 1
+        print(label, "DEVICE CLASSES", dict(classes))
     xref = value(lvs, "xref")
     for circuit in xref.each_circuit_pair():
         print("CIRCUIT", value(value(circuit, "first"), "name") if value(circuit, "first") else None,

@@ -33,3 +33,22 @@ jobs:
           python3 -m venv "$RUNNER_TEMP/lvs-inspect"
           "$RUNNER_TEMP/lvs-inspect/bin/pip" install klayout==0.30.13
           "$RUNNER_TEMP/lvs-inspect/bin/python" physical/diagnose_lvs.py build/inspect/pll-lvs.lvsdb
+      - name: Recheck saved full-chip geometry and diode extraction
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq klayout zstd
+          klayout -v
+          mkdir -p build/pdk
+          curl -fsSL --retry 3 https://github.com/chipfoundry/volare/releases/download/sky130-fa87f8f4bbcc7255b6f0c0fb506960f531ae2392/common.tar.zst | tar --zstd -x -C build/pdk
+          "$RUNNER_TEMP/lvs-inspect/bin/python" physical/check_layout.py --pdk build/pdk/sky130A --build build/inspect
+      - name: Show recheck evidence
+        if: always()
+        run: |
+          cat build/inspect/physical-verification.json
+          tail -40 build/inspect/pll-lvs.log
+          "$RUNNER_TEMP/lvs-inspect/bin/python" physical/diagnose_lvs.py build/inspect/pll-lvs.lvsdb
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: lvs-inspection
+          path: build/inspect
