@@ -50,6 +50,7 @@ def map_cells(yosys, liberty, on_chip_cal, mapped_netlist=None, max_coarse_code=
             f"synth -top {TOP} -flatten -noabc",
             "dfflibmap -liberty cells.lib",
             "abc -liberty cells.lib -dont_use sky130_fd_sc_hd__lpflow* -dont_use sky130_fd_sc_hd__probe*",
+            "hilomap -hicell sky130_fd_sc_hd__conb_1 HI -locell sky130_fd_sc_hd__conb_1 LO",
             "clean",
             "write_json mapped.json",
         ]

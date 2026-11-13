@@ -1,0 +1,132 @@
+name: Sky130 standalone route
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, physical-bringup, codex/rev4-phase-detector]
+    paths-ignore:
+      - '**/*.md'
+
+permissions:
+  contents: read
+
+jobs:
+  rtl:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Preserve PLL features
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq iverilog
+          python3 tests/run_rtl.py --fixed-centers
+          python3 tests/run_rtl.py --fixed-centers --corner-grid
+          python3 tests/run_rtl.py
+          python3 tests/run_rtl.py --fixed-centers --tracking-replicas --spice-data results/rev2-tt.csv --phase-shape results/rev4-tt-tracking-probe.csv
+  oscillator:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Build headless Magic and install the Sky130A models
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq tcl-dev ngspice zstd klayout
+          mkdir -p "$RUNNER_TEMP/magic-src" "$RUNNER_TEMP/sky130"
+          curl -fsSL --retry 3 \
+            https://codeload.github.com/RTimothyEdwards/magic/tar.gz/8d37ad4cb49a839eb3e32016f1c06e9bca20d8ef \
+            | tar xz --strip-components=1 -C "$RUNNER_TEMP/magic-src"
+          (
+            cd "$RUNNER_TEMP/magic-src"
+            ./configure --prefix="$RUNNER_TEMP/magic" --disable-readline \
+              --without-x --without-opengl --without-cairo --without-tk
+            make -j4
+            make install
+          ) > "$RUNNER_TEMP/magic-build.log" 2>&1 || {
+            tail -80 "$RUNNER_TEMP/magic-build.log"
+            exit 1
+          }
+          release=https://github.com/chipfoundry/volare/releases/download/sky130-fa87f8f4bbcc7255b6f0c0fb506960f531ae2392
+          for asset in common sky130_fd_pr; do
+            curl -fsSL --retry 3 "$release/$asset.tar.zst" | tar --zstd -x -C "$RUNNER_TEMP/sky130"
+          done
+      - name: Extract the oscillator and check tuning endpoints
+        run: |
+          mkdir -p build/oscillator
+          python3 -m venv "$RUNNER_TEMP/vibe-oscillator"
+          python="$RUNNER_TEMP/vibe-oscillator/bin/python"
+          "$python" -m pip install klayout==0.30.13
+          "$python" physical/layout_dco.py --schematic spice/cpz4_dco_tracking.spice --output build/oscillator
+          "$python" physical/check_dco.py --pdk "$RUNNER_TEMP/sky130/sky130A" --build build/oscillator
+          export PDK_ROOT="$RUNNER_TEMP/sky130"
+          export PATH="$RUNNER_TEMP/magic/bin:$PATH"
+          (
+            cd build/oscillator
+            magic -dnull -noconsole -rcfile "$PDK_ROOT/sky130A/libs.tech/magic/sky130A.magicrc" \
+              "$GITHUB_WORKSPACE/physical/extract_dco.tcl"
+          ) 2>&1 | tee build/oscillator/magic-pex.log
+          test -s build/oscillator/cpz4_dco_pex.spice
+          model="$PDK_ROOT/sky130A/libs.tech/ngspice/sky130.lib.spice"
+          pex=build/oscillator/cpz4_dco_pex.spice
+          "$python" spice/dco_deck.py --lib "$model" --netlist "$pex" \
+            --codes 52 --fine-codes 64 --output build/oscillator/pex-tt.csv &
+          nominal=$!
+          "$python" spice/dco_deck.py --lib "$model" --netlist "$pex" \
+            --codes 255 --fine-codes 128 --output build/oscillator/pex-tt-max.csv &
+          typical=$!
+          "$python" spice/dco_deck.py --lib "$model" --netlist "$pex" \
+            --corner ss --vdd 1.62 --temp 0 --codes 255 --fine-codes 128 \
+            --output build/oscillator/pex-ss-max.csv &
+          slow=$!
+          wait "$nominal" "$typical" "$slow"
+          test -s build/oscillator/pex-tt.csv
+          test -s build/oscillator/pex-tt-max.csv
+          test -s build/oscillator/pex-ss-max.csv
+      - name: Upload oscillator extraction
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: sky130-oscillator
+          path: build/oscillator
+          if-no-files-found: warn
+  route:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Route standalone PLL
+        run: |
+          mkdir -p build/standalone build/pdk
+          release=https://github.com/chipfoundry/volare/releases/download/sky130-fa87f8f4bbcc7255b6f0c0fb506960f531ae2392
+          for asset in common sky130_fd_pr sky130_fd_sc_hd; do
+            curl -fsSL --retry 3 "$release/$asset.tar.zst" | tar --zstd -x -C build/pdk
+          done
+          docker run --rm --platform linux/amd64 \
+            --volume "$GITHUB_WORKSPACE:/project" --workdir /project \
+            --env SKY130A=/project/build/pdk/sky130A \
+            --entrypoint /bin/bash \
+            openroad/orfs@sha256:73275384ed91270ea0e5f47710b3c2ff1b91708440c0744208ff226b751f88a0 \
+            -lc 'apt-get update -qq && apt-get install -y -qq klayout;
+                 export PATH="/OpenROAD-flow-scripts/tools/install/OpenROAD/bin:/OpenROAD-flow-scripts/tools/install/yosys/bin:$PATH";
+                 if ! command -v openroad; then
+                   binary=$(find /OpenROAD-flow-scripts /opt /usr/local -type f -name openroad -print -quit);
+                   test -x "$binary" || exit 127;
+                   export OPENROAD="$binary";
+                 fi;
+                 python3 -m venv /tmp/vibe-layout &&
+                 /tmp/vibe-layout/bin/pip install klayout==0.30.13 &&
+                 PYTHON=/tmp/vibe-layout/bin/python bash physical/run_standalone.sh build/standalone'
+      - name: Upload route outputs and diagnostics
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: sky130-standalone
+          path: build/standalone
+          if-no-files-found: warn

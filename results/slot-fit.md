@@ -1,6 +1,8 @@
 # Chipalooza #4 floorplan check
 
-This page records the original compact build. The [current revision](rev3.md) passes the same provisional floorplan check at 62.44% digital row utilization.
+This page records the original compact build. For the current layout, use
+the [physical implementation](../physical/README.md). The [rev. 3 results](rev3.md)
+record the schematic-based replays and sensitivity studies.
 
 The Challenge #4 organizer will specify the assigned outline and wrapper in the harness repository. This check uses a provisional **400 × 250 µm** rectangle based on the PLL's **0.10 mm²** planning target. It reserves a **100 × 100 µm** corner for the DCO and its guard ring, and **5 µm** per edge for wrapper access. The DCO reservation is a layout allocation. [Challenge #4 rules](https://opencircuitdesign.com/chipalooza/rules-4.html)
 

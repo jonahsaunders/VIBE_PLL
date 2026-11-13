@@ -460,7 +460,21 @@ def aggregate_dac(netlist, code, fine_code, library, corner, independent_supply=
 def run_case(args, code, fine_code):
     with tempfile.TemporaryDirectory(prefix="cpz4-spice-") as name:
         path = Path(name)
-        source = schematic(args.replica_strength, args.tracking_replicas, args.filtered_bias)
+        if args.netlist:
+            source = args.netlist.read_text(encoding="ascii")
+            header = re.sub(r"\n\+\s*", " ", source)
+            ports = re.search(r"^\.subckt\s+cpz4_dco\s+([^\n]+)", header, re.IGNORECASE | re.MULTILINE)
+            expected = ("vdd", "vss", "enable", *THERM_PINS, *FINE_THERM_PINS, *TAP_PINS, *FINE_TAP_PINS)
+            if not ports:
+                raise ValueError("Extracted netlist has no cpz4_dco subcircuit")
+            actual = tuple(name.lower() for name in ports[1].split())
+            if len(actual) != len(expected) or set(actual) != set(expected):
+                raise ValueError("Extracted DCO ports differ from the schematic interface")
+            # Extractors can assign a different subcircuit pin order.
+            source = re.sub(r"(?im)^\.subckt[ \t]+cpz4_dco[ \t]+[^\n]*(?:\n\+[^\n]*)*",
+                            wrapped_line(".subckt", ("cpz4_dco", *expected), "").rstrip(), source, count=1)
+        else:
+            source = schematic(args.replica_strength, args.tracking_replicas, args.filtered_bias)
         if args.aggregate_dac:
             source = aggregate_dac(source, code, fine_code, args.lib, args.corner,
                                    bool(args.supply_ripple_mv), args.filtered_bias, args.step_to)
@@ -542,6 +556,7 @@ def main():
     parser.add_argument("--lib", type=Path, help="absolute or relative path to sky130.lib.spice")
     parser.add_argument("--ngspice", default="ngspice", help="ngspice executable, default ngspice on PATH")
     parser.add_argument("--ngspice-dll", type=Path, help="run each case using a shared ngspice library")
+    parser.add_argument("--netlist", type=Path, help="simulate an extracted cpz4_dco subcircuit")
     parser.add_argument("--corner", default="tt", choices=("tt", "ff", "ss", "fs", "sf"))
     parser.add_argument("--vdd", default=1.8, type=float)
     parser.add_argument("--temp", default=25.0, type=float)
@@ -590,6 +605,10 @@ def main():
         parser.error("--step-skew-ps requires --step-to and a finite nonnegative delay")
     if args.aggregate_dac and args.step_skew_ps:
         parser.error("skewed code transitions require individual DAC devices")
+    if args.netlist:
+        if not args.lib or args.emit or args.aggregate_dac:
+            parser.error('--netlist requires --lib and uses the extracted DAC instances')
+        args.netlist = args.netlist.resolve(strict=True)
     if args.emit:
         source = schematic(args.replica_strength, args.tracking_replicas, args.filtered_bias)
         args.emit.write_text(source, encoding="ascii", newline="\n")
