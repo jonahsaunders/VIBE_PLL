@@ -31,6 +31,8 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           persist-credentials: false
+      - name: Check verifier syntax
+        run: python3 -m py_compile physical/check_dco.py physical/check_layout.py tests/check_diode_guard.py
       - name: Inspect artifact connectivity
         run: |
           gh run download "$RUN_ID" --name sky130-standalone --dir build/inspect
@@ -58,6 +60,7 @@ jobs:
           mkdir -p build/pdk
           curl -fsSL --retry 3 https://github.com/chipfoundry/volare/releases/download/sky130-fa87f8f4bbcc7255b6f0c0fb506960f531ae2392/common.tar.zst | tar --zstd -x -C build/pdk
           "$RUNNER_TEMP/lvs-inspect/bin/python" physical/check_layout.py --pdk build/pdk/sky130A --build build/inspect --geometry-mode deep
+          "$RUNNER_TEMP/lvs-inspect/bin/python" tests/check_diode_guard.py --pdk build/pdk/sky130A --build build/inspect
       - name: Show recheck evidence
         if: always()
         run: |
