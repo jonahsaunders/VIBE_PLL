@@ -58,6 +58,8 @@ python spice/dco_deck.py --lib "$model" --aggregate-dac --filtered-bias \
 python analysis/loop_budget.py --supply-tone 2e6 55.053 10 --tone-budget-ps 100
 ```
 
+`python analysis/loop_budget.py --noise-spectra spectra.csv` reports reference, DCO, supply, and total RMS jitter for each tracking gear. Supply the same increasing offset grid for all columns. The CSV header is `offset_hz,reference_dbc_hz,dco_dbc_hz,supply_v2_per_hz,pushing_mhz_per_v`. Use single-sideband phase noise at the reference and free-running oscillator carriers, plus the one-sided PSD of the local DCO supply. The first and last offsets define the integration band and must lie below half the reference frequency. Integrate discrete spurs separately with the edge replay or a single-tone calculation.
+
 The tracking-replica schematic with the filter enabled started at TT, 1.8 V and 25 °C at the nominal tune code. Its first rising edge arrived 475 ns after enable and the shortest period was 3.893 ns. Supply pushing with both options enabled and startup at code zero still need characterization. The supply budget also depends on the routed DCO branch, package impedance, and oscillator noise. Use `--cold-start` for startup from standby and `--step-to COARSE FINE` with individual DAC cells for a code change. Both report the shortest period and high and low pulse widths. `--step-skew-ps` staggers the changing selects within each DAC bank. [Startup data](rev4-filtered-startup.csv)
 
 ## Capture timing and guard
