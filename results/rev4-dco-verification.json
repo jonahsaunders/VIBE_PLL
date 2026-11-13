@@ -1,0 +1,15 @@
+{
+  "top": "cpz4_dco",
+  "passed": true,
+  "enabled_drc_groups": [
+    "feol",
+    "beol",
+    "offgrid"
+  ],
+  "layout_sha256": "550103442eef8f20f3a153b9ad18df118b97a39459a6b05cf09ab190655e71ad",
+  "reference_sha256": "686c1a07b7b728b67b62a3c6bdc427e1c219f481be73a502d612a966a611e96b",
+  "drc_deck_sha256": "d4cc44d9c95c9b97b994904b20c573333636a8c6e3918bb3bb9e5534d7253149",
+  "lvs_deck_sha256": "5648d948f3b6c6e649768f871adb796d20c3de868c634ac62290df5116262b3d",
+  "drc_markers": 0,
+  "lvs_match": true
+}

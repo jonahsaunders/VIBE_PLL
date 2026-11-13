@@ -8,7 +8,6 @@ come from open_pdks; unknown cells, unsupported devices and unconnected pins fai
 import os
 from pathlib import Path
 import re
-import odb
 
 NUMBER = re.compile(r"([+-]?[\d.]+(?:e[+-]?\d+)?)([a-z]*)$", re.I)
 SCALE = {"": 1, "u": 1e-6, "n": 1e-9, "p": 1e-12, "m": 1e-3}
@@ -37,6 +36,8 @@ def read_cells(paths):
                 nets = words[1:first_param - 1]
                 params = dict(w.lower().split("=", 1) for w in words[first_param:])
                 if "fet_" in model and len(nets) == 4:
+                    if any(float(params.get(p, "1")) != 1 for p in ("m", "mult", "nf")):
+                        raise ValueError(f"Unsupported MOS multiplicity in {path}: {line}")
                     width, length = (dimension(params[p]) for p in ("w", "l"))
                     if not (0.1 <= width <= 1000 and 0.1 <= length <= 100):
                         raise ValueError(f"Unexpected micron geometry in {path}: {line}")
@@ -56,6 +57,7 @@ def read_cells(paths):
 
 
 def main():
+    import odb
     build = Path(os.environ["OUT_DIR"])
     pdk = Path(os.environ["SKY130A"])
     cells = read_cells(sorted((pdk / "libs.ref/sky130_fd_sc_hd/spice").glob("*.spice")))
@@ -83,6 +85,9 @@ def main():
         for pin in pins:
             physical_pin = re.sub(r"_(\d+)$", r"[\1]", pin) if master == "cpz4_dco" else pin
             iterm = inst.findITerm(physical_pin)
+            if iterm is not None and iterm.getNet() is None and iterm.getMTerm().getIoType() == "OUTPUT":
+                nets.append(f"unused_output_{index}_{physical_pin}")
+                continue
             if iterm is None or iterm.getNet() is None:
                 raise ValueError(f"Unconnected reference terminal {inst.getName()}/{physical_pin}")
             nets.append(iterm.getNet().getName())

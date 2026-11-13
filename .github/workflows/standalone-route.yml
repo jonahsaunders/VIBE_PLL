@@ -63,6 +63,7 @@ jobs:
           "$python" -m pip install klayout==0.30.13
           "$python" physical/layout_dco.py --schematic spice/cpz4_dco_tracking.spice --output build/oscillator
           "$python" physical/check_dco.py --pdk "$RUNNER_TEMP/sky130/sky130A" --build build/oscillator
+          "$python" tests/check_physical_guards.py --pdk "$RUNNER_TEMP/sky130/sky130A" --build build/oscillator
           export PDK_ROOT="$RUNNER_TEMP/sky130"
           export PATH="$RUNNER_TEMP/magic/bin:$PATH"
           (

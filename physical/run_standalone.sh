@@ -25,7 +25,7 @@ export RUN_DETAIL_ROUTE=1
 export TRACKING_REPLICAS=${TRACKING_REPLICAS:-1}
 export DIE_AREA=${DIE_AREA:-"0 0 600 400"}
 export CORE_AREA=${CORE_AREA:-"5 5 595 395"}
-export DCO_RESERVE=${DCO_RESERVE:-"298 153"}
+export DCO_RESERVE=${DCO_RESERVE:-"298 123"}
 if [[ -z ${RCX_RULES:-} && -r "$platform/rcx_patterns.rules" ]]; then
     export RCX_RULES="$platform/rcx_patterns.rules"
 fi
@@ -63,5 +63,6 @@ fi
     --gds "$platform/gds/sky130_fd_sc_hd.gds" "$build/cpz4_dco.gds" \
     --output "$build/cpz4_sky130-review.gds"
 "$openroad" -exit -python "$root/physical/export_lvs.py"
-"$python" "$root/physical/check_layout.py" --klayout "$klayout" --pdk "$SKY130A" --build "$build"
+"$python" "$root/physical/check_layout.py" --klayout "$klayout" --pdk "$SKY130A" --build "$build" \
+    --route-exit-code "$route_status"
 exit "$route_status"

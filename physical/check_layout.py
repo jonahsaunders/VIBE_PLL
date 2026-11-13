@@ -18,13 +18,14 @@ def main():
     p.add_argument("--build", type=Path, required=True)
     p.add_argument("--pdk", type=Path, required=True)
     p.add_argument("--klayout", default="klayout")
+    p.add_argument("--route-exit-code", type=int, default=0)
     a = p.parse_args()
     build = a.build.resolve(strict=True)
     decks = a.pdk.resolve(strict=True) / "libs.tech/klayout"
     layout = build / "cpz4_sky130-review.gds"
     reference = build / "cpz4_sky130_lvs.spice"
     summary = {"top": "cpz4_sky130", "layout_sha256": sha(layout),
-               "reference_sha256": sha(reference), "passed": False}
+               "reference_sha256": sha(reference), "route_exit_code": a.route_exit_code, "passed": False}
     result = build / "physical-verification.json"
     report = build / "pll-drc.lyrdb"
     for stale in (result, report, build / "pll-lvs.lvsdb", build / "cpz4_sky130.gds"):
@@ -44,9 +45,12 @@ def main():
         route_checks = (build / "route-checks.txt").read_text()
         summary["route_drc"] = route_drc
         summary["route_checks"] = route_checks
+        checks = dict(line.split(": ", 1) for line in route_checks.splitlines())
         summary["passed"] = (summary["drc_markers"] == 0 and summary["lvs_match"] and
-                             route_drc == 0 and "All signal nets routed: 1" in route_checks and
-                             "Antenna-violating nets: 0" in route_checks)
+                             route_drc == 0 and a.route_exit_code == 0 and
+                             checks.get("All signal nets routed") == "1" and
+                             checks.get("Antenna-violating nets") == "0" and
+                             checks.get("Power grids connected") == "1")
         if summary["passed"]:
             (build / "cpz4_sky130.gds").write_bytes(layout.read_bytes())
         return 0 if summary["passed"] else 1

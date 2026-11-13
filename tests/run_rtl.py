@@ -196,7 +196,7 @@ def main():
         if compiled is None:
             subprocess.run([*common, "-s", "cpz4_sky130", f"-Pcpz4_sky130.ON_CHIP_CAL={parameter}",
                             f"-Pcpz4_sky130.TRACKING_REPLICAS={replicas}",
-                            "-o", build / "wrapper.vvp", *RTL], check=True)
+                            "-t", "null", *RTL], check=True)
             subprocess.run([*common, "-s", "tb_pll", f"-Ptb_pll.ON_CHIP_CAL={parameter}",
                             f"-Ptb_pll.TRACKING_REPLICAS={replicas}",
                             "-o", output, *RTL, ROOT / "tests" / "tb_pll.sv"], check=True)

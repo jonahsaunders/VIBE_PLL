@@ -3,6 +3,8 @@
 """Run the Sky130 KLayout geometry and device-connectivity checks for the DCO."""
 
 import argparse
+import hashlib
+import json
 from pathlib import Path
 import subprocess
 import xml.etree.ElementTree as ET
@@ -57,22 +59,35 @@ def main():
     pdk = args.pdk.resolve(strict=True) / "libs.tech" / "klayout"
     layout = build / "cpz4_dco.gds"
     drc_report = build / "dco-drc.lyrdb"
-    for stale in (drc_report, build / "dco-lvs.lvsdb", build / "dco-lvs.log"):
+    reference = build / "cpz4_dco_lvs.spice"
+    result_path = build / "dco-verification.json"
+    for stale in (drc_report, build / "dco-lvs.lvsdb", build / "dco-lvs.log", result_path):
         stale.unlink(missing_ok=True)
-    run(args.klayout, build, "dco-drc", pdk / "drc" / "sky130A_mr.drc",
-        {"input": layout, "report": drc_report, "top_cell": "cpz4_dco",
-         "feol": 1, "beol": 1, "offgrid": 1})
-    violations = len(ET.parse(drc_report).findall("./items/item"))
-    print(f"DCO geometry DRC markers: {violations}")
-    deck = build / "sky130-portable.lvs"
-    normalize_lvs(pdk / "lvs" / "sky130.lvs", deck)
-    run(args.klayout, build, "dco-lvs", deck,
-        {"input": layout, "schematic": build / "cpz4_dco_lvs.spice",
-         "report": build / "dco-lvs.lvsdb", "lvs_sub": "vss", "thr": 2})
-    if "Netlists match." not in (build / "dco-lvs.log").read_text(encoding="utf-8"):
-        raise SystemExit("KLayout did not report a matching device netlist")
-    print("DCO LVS match")
-    return int(violations != 0)
+    result = {"top": "cpz4_dco", "passed": False, "enabled_drc_groups": ["feol", "beol", "offgrid"]}
+    for label, path in (("layout", layout), ("reference", reference),
+                        ("drc_deck", pdk / "drc/sky130A_mr.drc"),
+                        ("lvs_deck", pdk / "lvs/sky130.lvs")):
+        result[label + "_sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
+    try:
+        run(args.klayout, build, "dco-drc", pdk / "drc" / "sky130A_mr.drc",
+            {"input": layout, "report": drc_report, "top_cell": "cpz4_dco",
+             "feol": 1, "beol": 1, "offgrid": 1})
+        violations = len(ET.parse(drc_report).findall("./items/item"))
+        result["drc_markers"] = violations
+        print(f"DCO geometry DRC markers: {violations}")
+        deck = build / "sky130-portable.lvs"
+        normalize_lvs(pdk / "lvs" / "sky130.lvs", deck)
+        run(args.klayout, build, "dco-lvs", deck,
+            {"input": layout, "schematic": reference,
+             "report": build / "dco-lvs.lvsdb", "lvs_sub": "vss", "thr": 2})
+        result["lvs_match"] = "Netlists match." in (build / "dco-lvs.log").read_text(encoding="utf-8")
+        if not result["lvs_match"]:
+            raise SystemExit("KLayout did not report a matching device netlist")
+        print("DCO LVS match")
+        result["passed"] = violations == 0
+        return int(violations != 0)
+    finally:
+        result_path.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
 
 
 if __name__ == "__main__":

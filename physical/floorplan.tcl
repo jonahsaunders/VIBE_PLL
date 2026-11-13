@@ -162,6 +162,9 @@ if {$detailed || $global_only} {
                 set grid_ok 0
             }
         }
+        set report [open [file join $out route-checks.txt] a]
+        puts $report "Power grids connected: $grid_ok"
+        close $report
         if {[info exists ::env(RCX_RULES)]} {
             define_process_corner -ext_model_index 0 sky130_tt
             extract_parasitics -ext_model_file $::env(RCX_RULES)

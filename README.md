@@ -4,6 +4,10 @@ A proposal-stage SoC clock macro with a phase-domain all-digital loop and a tran
 
 The PLL has a coarse/fine DCO, a 40-bin phase detector, selectable tracking bandwidth, and frequency-aware acquisition. Weak fine tuning triggers a longer rail measurement. The compact Sky130 wrapper offers nominal and slow-cold phase tables and an optional narrower tracking bandwidth on the channels immediately beside integer ratios. A build-time option enables on-chip code-density calibration. Configure the reference upper bound and the coarse-code ceiling for the intended operating point. The nominal channel is 25 MHz to 256.25 MHz.
 
+![Rev. 4 tracking-replica oscillator layout](docs/rev4-dco-layout.png)
+
+The tracking-replica oscillator layout passes the enabled geometry DRC checks and device-level LVS. [Layout verification and full-PLL status](results/rev4-layout.md).
+
 - [Design, controls, and timing](docs/design.md)
 - [Chipalooza #4 proposal](docs/proposal.md)
 - [Verification results](results/README.md)

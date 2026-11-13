@@ -90,7 +90,7 @@ class Layout:
     def __init__(self, tracking=False):
         self.tracking = tracking
         self.width = 290_000 if tracking else WIDTH
-        self.height = 145_000 if tracking else HEIGHT
+        self.height = 115_000 if tracking else HEIGHT
         self.vdd_x = self.width - 1_100
         self.layout = db.Layout()
         self.layout.dbu = 0.001
