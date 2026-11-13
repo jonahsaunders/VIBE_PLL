@@ -19,6 +19,7 @@ def main():
     p.add_argument("--pdk", type=Path, required=True)
     p.add_argument("--klayout", default="klayout")
     p.add_argument("--route-exit-code", type=int, default=0)
+    p.add_argument("--geometry-mode", choices=("flat", "deep"), default="flat")
     a = p.parse_args()
     build = a.build.resolve(strict=True)
     decks = a.pdk.resolve() / "libs.tech/klayout"
@@ -26,7 +27,7 @@ def main():
     reference = build / "cpz4_sky130_lvs.spice"
     summary = {"top": "cpz4_sky130", "route_exit_code": a.route_exit_code,
                "enabled_drc_groups": ["feol", "beol", "offgrid"],
-               "lvs_geometry_mode": "flat", "passed": False}
+               "lvs_geometry_mode": a.geometry_mode, "passed": False}
     result = build / "physical-verification.json"
     report = build / "pll-drc.lyrdb"
     for stale in (result, report, build / "pll-lvs.lvsdb", build / "pll-lvs.log",
@@ -61,7 +62,7 @@ def main():
         run(a.klayout, build, "pll-lvs", deck,
             {"input": layout, "schematic": reference, "report": build / "pll-lvs.lvsdb",
              "target_netlist": build / "pll-extracted.spice", "lvs_sub": "vss",
-             "schematic_simplify": "true", "run_mode": "flat", "thr": 4})
+             "schematic_simplify": "true", "run_mode": a.geometry_mode, "thr": 4})
         summary["lvs_match"] = "Netlists match." in (build / "pll-lvs.log").read_text()
         route_drc = int((build / "route-violations.txt").read_text().strip())
         route_checks = (build / "route-checks.txt").read_text()

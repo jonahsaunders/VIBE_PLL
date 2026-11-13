@@ -38,14 +38,18 @@ jobs:
           "$RUNNER_TEMP/lvs-inspect/bin/pip" install klayout==0.30.13
           "$RUNNER_TEMP/lvs-inspect/bin/python" physical/diagnose_lvs.py build/inspect/pll-lvs.lvsdb
       - name: Recheck saved full-chip geometry and diode extraction
-        if: github.event_name == 'workflow_dispatch' && inputs.recheck
+        if: (github.event_name == 'workflow_dispatch' && inputs.recheck) || startsWith(github.event.head_commit.message, 'Diagnose current')
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq klayout zstd
+          sudo apt-get install -y -qq zstd
+          curl -fsSL --retry 3 https://www.klayout.org/downloads/Ubuntu-24/klayout_0.30.13-1_amd64.deb -o "$RUNNER_TEMP/klayout.deb"
+          echo "ce86dbab94a1dd92bb293cfd86f8e97e  $RUNNER_TEMP/klayout.deb" | md5sum -c -
+          sha256sum "$RUNNER_TEMP/klayout.deb"
+          sudo apt-get install -y -qq "$RUNNER_TEMP/klayout.deb"
           klayout -v
           mkdir -p build/pdk
           curl -fsSL --retry 3 https://github.com/chipfoundry/volare/releases/download/sky130-fa87f8f4bbcc7255b6f0c0fb506960f531ae2392/common.tar.zst | tar --zstd -x -C build/pdk
-          "$RUNNER_TEMP/lvs-inspect/bin/python" physical/check_layout.py --pdk build/pdk/sky130A --build build/inspect
+          "$RUNNER_TEMP/lvs-inspect/bin/python" physical/check_layout.py --pdk build/pdk/sky130A --build build/inspect --geometry-mode deep
       - name: Show recheck evidence
         if: always()
         run: |
