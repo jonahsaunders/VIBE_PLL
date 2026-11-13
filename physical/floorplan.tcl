@@ -124,7 +124,7 @@ if {$detailed || $global_only} {
     report_checks -path_delay min_max -group_path_count 5
     source [file join $here capture_paths.tcl]
     if {$detailed} {
-        repair_antennas sky130_fd_sc_hd__diode_2 -iterations 5 -ratio_margin 30
+        repair_antennas sky130_fd_sc_hd__diode_2 -iterations 5 -ratio_margin 30 -allow_congestion
         detailed_placement
         global_connect
         set detail_args [list -output_drc [file join $out route-drc.rpt] \
@@ -138,7 +138,7 @@ if {$detailed || $global_only} {
         # before filler insertion; every iteration is checked again.
         set antenna [check_antennas]
         for {set iteration 0} {$antenna != 0 && $iteration < 4} {incr iteration} {
-            repair_antennas sky130_fd_sc_hd__diode_2 -diode_only -iterations 1 -ratio_margin 30
+            repair_antennas sky130_fd_sc_hd__diode_2 -diode_only -iterations 1 -ratio_margin 30 -allow_congestion
             global_connect
             detailed_route {*}$detail_args
             set antenna [check_antennas]

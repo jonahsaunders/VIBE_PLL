@@ -44,7 +44,13 @@ def main():
         section = "#=== FLATTEN CELLS ===\nalign"
         if section not in text:
             raise ValueError("Expected the Sky130 hierarchy alignment section")
-        deck.write_text(text.replace(section, "#=== FLATTEN CELLS ===\nnetlist.flatten\nschematic.flatten\nalign", 1))
+        text = text.replace(section, "#=== FLATTEN CELLS ===\nnetlist.make_top_level_pins\nnetlist.flatten\nschematic.flatten\nalign", 1)
+        # Preserve the actual top-level interface. Calling simplify after
+        # flatten would turn internal cell labels into new external pins.
+        for graph in ("netlist", "schematic"):
+            text = text.replace(graph + ".simplify", graph + ".purge\n" +
+                                graph + ".combine_devices\n" + graph + ".purge_nets")
+        deck.write_text(text)
         run(a.klayout, build, "pll-lvs", deck,
             {"input": layout, "schematic": reference, "report": build / "pll-lvs.lvsdb",
              "target_netlist": build / "pll-extracted.spice", "lvs_sub": "vss",

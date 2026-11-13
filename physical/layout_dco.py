@@ -223,6 +223,21 @@ class Layout:
         options.set_format_from_filename(f"{TOP}.gds")
         options.gds2_write_timestamps = False
         self.layout.write(str(output / f"{TOP}.gds"), options)
+        # A marker may extend beyond its wire (notably at a short tap
+        # trunk). Expose only manufactured metal to the digital router.
+        # Otherwise it can legally stop inside the abstract pin but leave
+        # a physical gap, which only full-chip LVS detects.
+        exposed = {}
+        for name, shapes in self.pins.items():
+            exposed[name] = []
+            for metal, box in shapes:
+                actual = db.Region(self.cell.shapes(self.layers[metal]))
+                contact = actual & db.Region(db.Box(*box))
+                for polygon in contact.decompose_trapezoids_to_region().each():
+                    b = polygon.bbox()
+                    exposed[name].append((metal, (b.left, b.bottom, b.right, b.top)))
+            if not exposed[name]:
+                raise ValueError(f"Pin {name} has no drawing metal")
         lines = ['VERSION 5.7 ;', 'BUSBITCHARS "[]" ;', 'DIVIDERCHAR "/" ;',
                  f"MACRO {TOP}", "  CLASS BLOCK ;", "  ORIGIN 0 0 ;",
                  f"  SIZE {self.width / 1000:g} BY {self.height / 1000:g} ;"]
@@ -231,7 +246,7 @@ class Layout:
             use = {"vdd": "POWER", "vss": "GROUND"}.get(name, "SIGNAL")
             lines += [f"  PIN {lef_name(name)}", f"    DIRECTION {direction} ;",
                       f"    USE {use} ;", "    PORT"]
-            for metal, box in self.pins[name]:
+            for metal, box in exposed[name]:
                 if use != "SIGNAL" and metal != "met5":
                     continue
                 lines += [f"      LAYER {metal} ;", "        RECT " +
@@ -244,7 +259,7 @@ class Layout:
             # particular, an access wire must not squeeze beside a tap trunk.
             if metal in ("met1", "met2", "met3"):
                 metal_region = db.Region(db.Box(0, 0, self.width, self.height))
-            pins = [db.Box(*box) for name, shapes in self.pins.items()
+            pins = [db.Box(*box) for name, shapes in exposed.items()
                     for layer, box in shapes if layer == metal and
                     (name not in ("vdd", "vss") or metal == "met5")]
             if pins:

@@ -38,6 +38,15 @@ def main():
     merged = db.Layout()
     merged.dbu = layout.dbu
     merged.create_cell(top.name).copy_tree(top)
+    # DEF pin shapes are imported on the pin-purpose layer. The boundary
+    # terminals also need drawing metal, or their labels can sit beyond
+    # the routed wire and disappear from device-level extraction.
+    physical_top = merged.cell(top.name)
+    for layer in range(67, 73):
+        pin_layer = merged.find_layer(layer, 16)
+        if pin_layer is not None:
+            physical_top.shapes(merged.layer(layer, 20)).insert(
+                db.Region(physical_top.shapes(pin_layer)))
     missing = [cell.name for cell in merged.each_cell() if cell.is_empty()]
     if missing:
         raise ValueError(f"Missing physical cell views: {', '.join(sorted(missing))}")
