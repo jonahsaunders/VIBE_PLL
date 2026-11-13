@@ -34,6 +34,14 @@ jobs:
       - name: Inspect artifact connectivity
         run: |
           gh run download "$RUN_ID" --name sky130-standalone --dir build/inspect
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path("build/inspect/sky130-portable.lvs")
+          print("ACTUAL PINNED DECK DIODE RULES")
+          for number, line in enumerate(path.read_text().splitlines(), 1):
+              if any(key in line for key in ("ndiode", "areaid_de", "areaid_ed", "ncomp ", "sub  ", "extract_devices(diode", "Starting DIODE", "JUNCTION")):
+                  print(number, line)
+          PY
           python3 -m venv "$RUNNER_TEMP/lvs-inspect"
           "$RUNNER_TEMP/lvs-inspect/bin/pip" install klayout==0.30.13
           "$RUNNER_TEMP/lvs-inspect/bin/python" physical/diagnose_lvs.py build/inspect/pll-lvs.lvsdb
