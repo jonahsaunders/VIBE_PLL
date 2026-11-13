@@ -1,6 +1,6 @@
 # Verification results
 
-The [area-constrained build](slot-fit.md) uses the same oscillator schematic. The closed-loop and spectral tables below record the previous self-calibrating revision; the area page reports the latest fixed-center replays.
+The [current compact build](rev3.md) uses the same oscillator schematic. The closed-loop and spectral tables below record the earlier self-calibrating revision. The [area page](slot-fit.md) records the first compact build and the planning methodology.
 
 ## Sky130A schematic
 

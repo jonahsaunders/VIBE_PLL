@@ -75,42 +75,83 @@ def spice_table(source, destination):
     return max_code
 
 
+def corner_grid():
+    """Sample both output endpoints and one intermediate channel at each PVT."""
+    ratios = {
+        16: (40960, 76800, 65664),
+        20: (32768, 61440, 48128),
+        25: (26215, 49152, 41984),
+        32: (20480, 38400, 32769),
+    }
+    for corner, filename in (("tt", "rev2-tt.csv"), ("ss-cold", "rev3-ss-cold.csv"), ("ff", "rev2-ff.csv")):
+        for reference, (start, retune, edge) in ratios.items():
+            yield corner, ROOT / "results" / filename, reference, start, retune, edge
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--iverilog", default="iverilog")
     parser.add_argument("--vvp", default="vvp")
+    parser.add_argument("--compiled-testbench", type=Path,
+                        help="reuse a tb_pll.vvp compiled with the matching ON_CHIP_CAL setting")
     parser.add_argument("--trace", type=Path, help="write a nominal transient trace CSV")
     parser.add_argument("--spice-data", type=Path, help="use a single PVT DCO sweep CSV")
+    parser.add_argument("--corner-grid", action="store_true", help="run the fixed-center PVT regression grid")
     parser.add_argument("--ref", type=float, default=25.0, help="reference MHz for --spice-data")
     parser.add_argument("--edge", type=int, help="additional Q5.12 ratio for --spice-data")
     parser.add_argument("--start", type=int, help="initial Q5.12 ratio for --spice-data or --spectrum")
     parser.add_argument("--retune", type=int, help="second Q5.12 ratio for --spice-data")
-    parser.add_argument("--spectrum", type=Path, help="capture 131072 raw edges at the initial ratio")
+    parser.add_argument("--spectrum", type=Path, help="capture raw edges at the initial ratio")
+    parser.add_argument("--spectrum-edges", type=int, default=131072, help="raw edges to capture")
+    parser.add_argument("--spectrum-settle", type=int, default=4096, help="reference cycles before capture")
     parser.add_argument("--tracking-gear", type=int, choices=(0, 1, 2))
     parser.add_argument("--calibrate", action="store_true", help="load a manual code-density LUT")
     parser.add_argument("--cal-code", type=int, default=70, help="manual coarse code for calibration")
     parser.add_argument("--fixed-centers", action="store_true", help="use the area-saving fixed TDC table")
     parser.add_argument("--coarse-phase", action="store_true", help="use the ten-bin detector for the loop")
+    parser.add_argument("--slow-phase-profile", action="store_true", help="use the slow-cold fixed table")
+    parser.add_argument("--no-dither", action="store_true", help="disable fine-DAC residue feedback")
+    parser.add_argument("--narrow-near-integer", action="store_true",
+                        help="reduce tracking bandwidth one step at +/-1 LSB from integer ratios")
     parser.add_argument("--startup-delay-ps", type=float, default=173.209,
                         help="initial oscillator phase offset in the behavioral plant")
     args = parser.parse_args()
     if args.fixed_centers and args.calibrate:
         parser.error("--calibrate requires on-chip calibration")
+    if args.corner_grid and (not args.fixed_centers or args.spice_data or args.spectrum):
+        parser.error("--corner-grid requires --fixed-centers and uses the repository sweeps")
+    if args.slow_phase_profile and (not args.fixed_centers or args.coarse_phase):
+        parser.error("--slow-phase-profile requires the fixed fine detector")
+    if args.spectrum_edges < 2 or args.spectrum_settle < 0:
+        parser.error("spectrum capture requires at least two edges and nonnegative settling")
+    compiled = args.compiled_testbench.resolve(strict=True) if args.compiled_testbench else None
     with tempfile.TemporaryDirectory(prefix="cpz4-rtl-") as temp:
         build = Path(temp)
-        output = build / "tb_pll.vvp"
+        output = compiled or build / "tb_pll.vvp"
         common = [args.iverilog, "-g2012", "-Wall", "-Wno-timescale"]
         parameter = int(not args.fixed_centers)
-        subprocess.run([*common, "-s", "cpz4_sky130", f"-Pcpz4_sky130.ON_CHIP_CAL={parameter}",
-                        "-t", "null", *RTL], check=True)
-        if not args.spice_data and not args.spectrum:
+        if compiled is None:
+            subprocess.run([*common, "-s", "cpz4_sky130", f"-Pcpz4_sky130.ON_CHIP_CAL={parameter}",
+                            "-t", "null", *RTL], check=True)
+            subprocess.run([*common, "-s", "tb_pll", f"-Ptb_pll.ON_CHIP_CAL={parameter}",
+                            "-o", output, *RTL, ROOT / "tests" / "tb_pll.sv"], check=True)
+        if not args.spice_data and not args.spectrum and not args.corner_grid and compiled is None:
             counter = build / "tb_edge_counter.vvp"
             subprocess.run([*common, "-s", "tb_edge_counter", "-o", counter, RTL[0],
                             ROOT / "tests" / "tb_edge_counter.sv"], check=True)
             subprocess.run([args.vvp, counter], check=True)
-        subprocess.run([*common, "-s", "tb_pll", f"-Ptb_pll.ON_CHIP_CAL={parameter}",
-                        "-o", output, *RTL, ROOT / "tests" / "tb_pll.sv"], check=True)
-        if args.spice_data:
+        if args.corner_grid:
+            scenarios = {}
+            ceilings = {}
+            for corner, source, reference, start, retune, edge in corner_grid():
+                table = build / f"{corner}.txt"
+                if corner not in ceilings:
+                    ceilings[corner] = spice_table(source, table)
+                scenarios[f"{corner}_{reference}MHz"] = [
+                    f"+spice_table={table}", f"+ref={reference}", f"+code_ceiling={ceilings[corner]}",
+                    f"+start_n={start}", f"+retune_n={retune}", f"+edge={edge}",
+                ]
+        elif args.spice_data:
             table = build / "dco.txt"
             max_code = spice_table(args.spice_data, table)
             extra = [f"+spice_table={table}", f"+ref={args.ref}", f"+code_ceiling={max_code}"]
@@ -130,13 +171,22 @@ def main():
                          for label, options in SCENARIOS.items()}
         for label, options in scenarios.items():
             print(f"CASE {label}", flush=True)
-            command = [args.vvp, output, *options, f"+startup_delay_ps={args.startup_delay_ps}"]
+            command = [args.vvp, output, *options, f"+startup_delay_ps={args.startup_delay_ps}",
+                       f"+expected_calibration={parameter}"]
             if args.tracking_gear is not None:
                 command.append(f"+tracking_gear={args.tracking_gear}")
             if args.calibrate:
                 command += ["+precalibrate", f"+cal_code={args.cal_code}"]
             if args.coarse_phase:
                 command.append("+coarse_phase")
+            if args.slow_phase_profile:
+                command.append("+slow_phase_profile")
+            if args.no_dither:
+                command.append("+no_dither")
+            if args.narrow_near_integer:
+                command.append("+narrow_near_integer")
+            if args.spectrum:
+                command += [f"+spectrum_edges={args.spectrum_edges}", f"+spectrum_settle={args.spectrum_settle}"]
             if args.trace and label in ("nominal", "spice_interpolated"):
                 command.append(f"+trace={args.trace.resolve()}")
             subprocess.run(command, check=True)

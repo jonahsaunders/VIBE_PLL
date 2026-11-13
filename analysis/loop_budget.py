@@ -46,7 +46,8 @@ def main():
     parser.add_argument("--ref", type=float, default=25e6)
     parser.add_argument("--out", type=float, default=256.25e6)
     parser.add_argument("--bins", type=int, choices=(10, 40), default=40)
-    parser.add_argument("--tracking-gear", type=int, choices=(0, 1, 2), default=2)
+    parser.add_argument("--tracking-gear", type=int, choices=(0, 1, 2, 3), default=2,
+                        help="gear 3 models the optional near-integer setting")
     args = parser.parse_args()
     for mode in ("acquire", "track"):
         for gain_ratio in (0.75, 1.0, 1.5, 2.0, 2.5):

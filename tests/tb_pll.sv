@@ -235,7 +235,9 @@ module tb_pll #(parameter ON_CHIP_CAL = 1'b1);
     endtask
 
     real started, lost_us, hold_start, last_edge_ps, edge_mhz;
-    integer initial_ratio, retune_ratio, value_unused, ref_bound, requested_gear;
+    integer initial_ratio, retune_ratio, value_unused, ref_bound, requested_gear, expected_calibration;
+    integer spectrum_edges, spectrum_settle;
+    reg [16:0] auto_mode;
     integer cal_code, test_ceiling;
     integer held_coarse, held_fine;
     integer spectrum_file, edge_id;
@@ -255,9 +257,21 @@ module tb_pll #(parameter ON_CHIP_CAL = 1'b1);
     initial begin
         initial_ratio = 41984;
         retune_ratio = 49152;
+        if ($value$plusargs("expected_calibration=%d", expected_calibration) &&
+            expected_calibration != int'(ON_CHIP_CAL))
+            $fatal(1, "The testbench was compiled for a different calibration mode");
         value_unused = $value$plusargs("startup_delay_ps=%f", startup_delay_ps);
         value_unused = $value$plusargs("start_n=%d", initial_ratio);
         value_unused = $value$plusargs("retune_n=%d", retune_ratio);
+        auto_mode = 0;
+        auto_mode[1] = !$test$plusargs("no_dither");
+        auto_mode[10] = $test$plusargs("coarse_phase");
+        auto_mode[11] = $test$plusargs("slow_phase_profile");
+        auto_mode[12] = $test$plusargs("narrow_near_integer");
+        spectrum_edges = 131072;
+        spectrum_settle = 4096;
+        value_unused = $value$plusargs("spectrum_edges=%d", spectrum_edges);
+        value_unused = $value$plusargs("spectrum_settle=%d", spectrum_settle);
         #1 reset_n = 0;
         repeat (5) @(negedge ref_clk);
         reset_n = 1;
@@ -277,8 +291,8 @@ module tb_pll #(parameter ON_CHIP_CAL = 1'b1);
             transact(3'd5, 17'd4);
             if (!status[0]) $fatal(1, "Calibration valid flag missing");
         end
-        if ($test$plusargs("precalibrate") || $test$plusargs("coarse_phase"))
-            transact(3'd1, $test$plusargs("coarse_phase") ? 17'd1026 : 17'd2);
+        if (ON_CHIP_CAL && ($test$plusargs("precalibrate") || auto_mode != 17'd2))
+            transact(3'd1, auto_mode);
         transact(3'd5, 17'd11);
         if (status[7:0] !== {7'b0, ON_CHIP_CAL}) $fatal(1, "Incorrect calibration capability");
         if (!ON_CHIP_CAL) begin
@@ -287,25 +301,28 @@ module tb_pll #(parameter ON_CHIP_CAL = 1'b1);
             transact(3'd2, 17'd1);
             if (!status[11] || status[10]) $fatal(1, "Fixed table accepted calibration command");
             transact(3'd2, 17'd4);
-            transact(3'd1, 17'd2);
+            transact(3'd1, auto_mode);
         end
         if (initial_ratio != 41984) transact(3'd0, 17'(initial_ratio));
         started = $realtime;
         enable = 1;
         acquire("fractional_default", started);
         measure_frequency(ref_mhz * initial_ratio / 4096.0);
+        transact(3'd5, 17'd12);
+        if (status[1:0] !== {auto_mode[12], auto_mode[11] && !ON_CHIP_CAL})
+            $fatal(1, "Incorrect phase profile or narrow tracking readback");
         if ($value$plusargs("spectrum=%s", spectrum_path)) begin
             spectrum_file = $fopen(spectrum_path, "w");
             if (spectrum_file == 0) $fatal(1, "Could not open edge times file");
             $fdisplay(spectrum_file, "time_ps");
-            repeat (128) @(posedge ref_clk);
-            for (edge_id = 0; edge_id < 131072; edge_id = edge_id + 1) begin
+            repeat (spectrum_settle) @(posedge ref_clk);
+            for (edge_id = 0; edge_id < spectrum_edges; edge_id = edge_id + 1) begin
                 @(posedge clk_out);
                 if (!status[9]) $fatal(1, "Unlock in spectral test");
                 $fdisplay(spectrum_file, "%.3f", $realtime);
             end
             $fclose(spectrum_file);
-            $display("PASS SPECTRUM raw_edges=131072");
+            $display("PASS SPECTRUM raw_edges=%0d", spectrum_edges);
             $finish;
         end
 
@@ -455,7 +472,7 @@ module tb_pll #(parameter ON_CHIP_CAL = 1'b1);
     end
 
     initial begin
-        #7000000000;
+        #70000000000;
         $fatal(1, "Global simulation timeout");
     end
 endmodule

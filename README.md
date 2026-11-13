@@ -2,12 +2,14 @@
 
 A proposal-stage SoC clock macro with a phase-domain all-digital loop and a transistor-level Sky130A ring oscillator. The design targets **160–300 MHz** from a **16–32 MHz** reference. It uses a 1.8 V core and requests a dedicated reference pad and divided monitor pad.
 
-The PLL has a coarse/fine DCO, a 40-bin phase detector, three selectable tracking gains, and frequency-aware acquisition. The default Sky130 wrapper uses fixed phase centers to fit a smaller floorplan. A build-time option enables on-chip code-density calibration. Configure the reference upper bound and the coarse-code ceiling for the intended operating point. The nominal channel is 25 MHz to 256.25 MHz.
+The PLL has a coarse/fine DCO, a 40-bin phase detector, selectable tracking bandwidth, and frequency-aware acquisition. Weak fine tuning triggers a longer rail measurement. The compact Sky130 wrapper offers nominal and slow-cold phase tables and an optional narrower tracking bandwidth on the channels immediately beside integer ratios. A build-time option enables on-chip code-density calibration. Configure the reference upper bound and the coarse-code ceiling for the intended operating point. The nominal channel is 25 MHz to 256.25 MHz.
 
 - [Design, controls, and timing](docs/design.md)
 - [Chipalooza #4 proposal](docs/proposal.md)
 - [Verification results](results/README.md)
 - [Area and floorplan check](results/slot-fit.md)
+- [Acquisition, spur, and DCO load verification](results/rev3.md)
+- [Standalone floorplan and timing constraints](physical/README.md)
 - [Original literature review and design report](chipalooza4-sky130-pll-report.pdf)
 
 ## Reproduce the checks
@@ -16,13 +18,15 @@ Use Python 3.10+, Icarus Verilog 12+, and ngspice with an installed open_pdks Sk
 
 ```sh
 python tests/run_rtl.py --fixed-centers
+python tests/run_rtl.py --fixed-centers --corner-grid
 python tests/run_rtl.py
 python analysis/loop_budget.py --tracking-gear 2
 python spice/dco_deck.py --emit spice/cpz4_dco.spice
 python spice/dco_deck.py --lib "$PDK_ROOT/sky130A/libs.tech/ngspice/sky130.lib.spice" \
   --aggregate-dac --corner tt --vdd 1.8 --temp 25 --codes 52 --fine-codes 64,65 --output nominal-step.csv
-python tests/run_rtl.py --spice-data results/rev2-tt.csv --fixed-centers --spectrum edges.csv
-python analysis/spectrum.py edges.csv
+python tests/run_rtl.py --spice-data results/rev2-tt.csv --fixed-centers --start 40961 \
+  --narrow-near-integer --spectrum-edges 524288 --spectrum edges.csv
+python analysis/spectrum.py edges.csv --lower 1000
 ```
 
 For a closed-loop replay, run the circuit sweep at several coarse codes and fine settings, including both fine rails, then use `python tests/run_rtl.py --spice-data sweep.csv --ref 25`. The replay limits the controller to the highest measured coarse code. See the verification results for the exact sweep and replay settings. The RTL regression covers lock, retuning, reference-loss holdover and the startup guard. Run it without `--fixed-centers` to exercise the on-chip calibration option.

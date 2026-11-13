@@ -8,6 +8,13 @@ module cpz4_pll #(
         120'hb7ab3aaa8a179d79989258ab869826,
         120'h77f6dd69c65e5db5525114d143f3af,
         120'h36e32f2ad2241e31a31230a5063020
+    },
+    parameter [479:0] SLOW_FINE_CENTERS = {
+        // Sky130A SS, 1.62 V, 0 C at coarse 172, fine 64. Bin zero is at the LSB.
+        120'hfd8f67edee5be12dcdd46ccac8dc39,
+        120'hbb0b2dae4a9fa1899c96992c8b0827,
+        120'h7c07646dd6616235d05474c447b436,
+        120'h3af3332f52a12181961531340ca040
     }
 ) (
     input  wire         ref_clk,
@@ -49,7 +56,7 @@ module cpz4_pll #(
     cpz4_ref_watchdog watchdog(ref_clk, run_n, clk_div2, dco_reset_n, watchdog_dco, watchdog_ref);
 
     reg [16:0] ratio;
-    reg manual, dither, coarse_phase_only;
+    reg manual, dither, coarse_phase_only, slow_phase_profile, narrow_near_integer;
     reg [7:0] manual_code, code_ceiling;
     reg [5:0] ref_upper_mhz;
     reg [1:0] tracking_gear;
@@ -76,9 +83,12 @@ module cpz4_pll #(
                                        fine_valid, fine_bin, cfg_data[5:0], fine_center, read_center,
                                        read_hits, cal_busy, cal_valid, cal_error);
         end else begin : fixed_centers
-            assign fine_center = fine_bin < 6'd40 ? FIXED_FINE_CENTERS[12*fine_bin +: 12] : 12'd0;
+            wire [959:0] profiles = {SLOW_FINE_CENTERS, FIXED_FINE_CENTERS};
+            wire [6:0] detector_index = slow_phase_profile ? {1'b0, fine_bin} + 7'd40 : {1'b0, fine_bin};
+            wire [6:0] read_index = slow_phase_profile ? {1'b0, cfg_data[5:0]} + 7'd40 : {1'b0, cfg_data[5:0]};
+            assign fine_center = fine_bin < 6'd40 ? profiles[12*detector_index +: 12] : 12'd0;
             assign read_center = cfg_data[5:0] < 6'd40 ?
-                                 FIXED_FINE_CENTERS[12*cfg_data[5:0] +: 12] : 12'd0;
+                                 profiles[12*read_index +: 12] : 12'd0;
             assign read_hits = 0;
             assign cal_busy = 0;
             assign cal_valid = 0;
@@ -87,6 +97,7 @@ module cpz4_pll #(
     endgenerate
     cpz4_loop_control loop_filter(.ref_clk(ref_clk), .reset_n(run_n), .restart(restart),
         .ref_timeout(watchdog_ref), .manual(manual), .dither_enable(dither),
+        .narrow_near_integer(narrow_near_integer),
         .manual_code(manual_code), .code_ceiling(code_ceiling), .ref_upper_mhz(ref_upper_mhz),
         .tracking_gear(tracking_gear), .ratio_q12(ratio), .phase_valid(phase_valid),
         .phase_q12({cycles, phase_center}), .dco_code(dco_code), .fine_code(fine_code),
@@ -129,6 +140,8 @@ module cpz4_pll #(
             manual       <= 0;
             dither       <= 1;
             coarse_phase_only <= 0;
+            slow_phase_profile <= 0;
+            narrow_near_integer <= 0;
             manual_code  <= 8'd24;
             code_ceiling <= 8'd255;
             ref_upper_mhz <= 6'd32;
@@ -168,6 +181,8 @@ module cpz4_pll #(
                             dither      <= cfg_data[1];
                             manual_code <= cfg_data[9:2];
                             coarse_phase_only <= cfg_data[10];
+                            slow_phase_profile <= cfg_data[11] && !ON_CHIP_CAL;
+                            narrow_near_integer <= cfg_data[12];
                             restart     <= 1'b1;
                         end
                     end
@@ -224,6 +239,7 @@ module cpz4_pll #(
                             17'd9: read_byte <= {6'b0, tracking_gear};
                             17'd10: read_byte <= {2'b0, ref_upper_mhz};
                             17'd11: read_byte <= {7'b0, ON_CHIP_CAL};
+                            17'd12: read_byte <= {6'b0, narrow_near_integer, slow_phase_profile};
                             default: read_byte <= 8'd0;
                         endcase
                     end

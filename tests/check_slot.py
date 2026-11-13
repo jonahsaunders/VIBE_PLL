@@ -32,7 +32,7 @@ def lef_cells(path):
     return cells
 
 
-def map_cells(yosys, liberty, on_chip_cal):
+def map_cells(yosys, liberty, on_chip_cal, mapped_netlist=None):
     executable = shutil.which(yosys)
     if executable is None:
         raise FileNotFoundError(f"Cannot find Yosys executable: {yosys}")
@@ -52,8 +52,12 @@ def map_cells(yosys, liberty, on_chip_cal):
             "clean",
             "write_json mapped.json",
         ]
+        if mapped_netlist is not None:
+            script.append("write_verilog -noattr -noexpr mapped.v")
         subprocess.run([executable, "-Q", "-q", "-p", "; ".join(script)], cwd=directory, check=True)
         design = json.loads((directory / "mapped.json").read_text(encoding="utf-8"))
+        if mapped_netlist is not None:
+            shutil.copyfile(directory / "mapped.v", mapped_netlist)
     return Counter(cell["type"] for cell in design["modules"][TOP]["cells"].values()
                    if cell["type"] != "$scopeinfo")
 
@@ -88,6 +92,7 @@ def main():
     parser.add_argument("--utilization", required=True, type=float,
                         help="maximum standard-cell utilization of remaining rows")
     parser.add_argument("--on-chip-cal", action="store_true", help="include the calibration histogram")
+    parser.add_argument("--mapped-netlist", type=Path, help="export mapped Verilog for physical design")
     args = parser.parse_args()
     positive_pair(parser, "--slot", args.slot)
     positive_pair(parser, "--dco-reserve", args.dco_reserve)
@@ -105,7 +110,7 @@ def main():
     if blocked_sites > sites or blocked_rows > rows:
         parser.error("DCO reservation extends outside the grid-aligned core")
 
-    mapped = map_cells(args.yosys, args.liberty, args.on_chip_cal)
+    mapped = map_cells(args.yosys, args.liberty, args.on_chip_cal, args.mapped_netlist)
     if mapped.pop(BLOCK, 0) != 1:
         parser.error("expected one DCO hard-macro instance")
     cells = lef_cells(args.lef)

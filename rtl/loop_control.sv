@@ -7,6 +7,7 @@ module cpz4_loop_control (
     input  wire        ref_timeout,
     input  wire        manual,
     input  wire        dither_enable,
+    input  wire        narrow_near_integer,
     input  wire [7:0]  manual_code,
     input  wire [7:0]  code_ceiling,
     input  wire [5:0]  ref_upper_mhz,
@@ -36,17 +37,24 @@ module cpz4_loop_control (
     localparam [22:0] COARSE_LIMIT = 23'd368 << 5;
     localparam [22:0] MIN_RUNNING = 23'd48 << 5;
     localparam [22:0] SETPOINT_LIMIT = 23'd350 << 12;
+    // Span in Q12 phase counts over a 32-reference-cycle measurement.
+    localparam [17:0] EXTEND_FINE_SPAN = 18'd4 << 8;
+    localparam [17:0] MIN_FINE_SPAN = 18'd1 << 8;
 
     reg [2:0] measurement;
     reg [3:0] settle_left;
     reg [4:0] measure_left;
     reg [10:0] acquire_ticks;
-    reg [23:0] anchor, best_distance, fine_low_measure;
-    reg [7:0] low_code, high_code, best_code;
+    reg [23:0] anchor;
+    reg [17:0] fine_low_measure;
+    reg [7:0] low_code, high_code;
     reg [3:0] gain_exponent;
-    reg monitor_active, fine_retried;
+    reg monitor_active, fine_retried, extended_fine;
+    reg [1:0] fine_windows;
 
-    reg [23:0] seed_rem, fine_span;
+    // Fine acquisition uses Q8 phase. The speed guard uses whole cycles
+    // and the tracking loop still uses Q12 phase.
+    reg [17:0] fine_work, fine_divisor;
     reg [6:0] seed_code;
     reg [2:0] seed_left;
 
@@ -58,13 +66,7 @@ module cpz4_loop_control (
 
     wire [23:0] target_delta = {2'b0, ratio_q12, 5'b0};
     wire [23:0] observed_delta = phase_q12 - anchor;
-    wire signed [24:0] target_difference = $signed({1'b0, observed_delta}) -
-                                               $signed({1'b0, target_delta});
-    wire below_target = target_difference[24];
-    wire [23:0] distance = below_target ? -target_difference[23:0] :
-                                         target_difference[23:0];
-    wire better_code = distance < best_distance;
-    wire [7:0] nearest_code = better_code ? dco_code : best_code;
+    wire below_target = observed_delta < target_delta;
     wire [7:0] next_low = below_target ? dco_code : low_code;
     wire [7:0] next_high = below_target ? high_code : dco_code;
     wire [7:0] next_span = next_high - next_low;
@@ -84,13 +86,22 @@ module cpz4_loop_control (
     wire [7:0] ramp_limit = manual ? manual_code : code_ceiling;
     wire [7:0] ramp_code = ramp_sum > {1'b0, ramp_limit} ? ramp_limit : ramp_sum[7:0];
 
-    wire [23:0] gain_delta = observed_delta - fine_low_measure;
-    // 32 reference cycles times 128 fine steps.
-    wire [23:0] rounded_gain = (gain_delta + 24'd2048) >> 12;
-    wire [24:0] seed_double = {seed_rem, 1'b0};
-    wire seed_bit = seed_double >= {1'b0, fine_span};
-    wire [24:0] seed_difference = seed_double - {1'b0, fine_span};
-    wire [23:0] seed_next_rem = seed_bit ? seed_difference[23:0] : seed_double[23:0];
+    wire accumulate_fine = extended_fine && measurement >= FINE_LOW;
+    // The guard limits each 32-cycle advance to less than 800 cycles.
+    // Sum four quarter-weighted deltas to bound the truncation to <4 Q8 LSB.
+    wire [17:0] fine_total = fine_work + {2'b0, observed_delta[21:6]};
+    wire [17:0] fine_measured = accumulate_fine ? fine_total : observed_delta[21:4];
+    wire [18:0] fine_target = target_delta[22:4];
+    wire [18:0] gain_difference = {1'b0, fine_measured} - {1'b0, fine_low_measure};
+    wire [17:0] gain_delta = gain_difference[17:0];
+    wire positive_gain = !gain_difference[18] && gain_delta != 0;
+    // Each whole phase cycle equals one Q12 gain unit (32 cycles, 128 steps).
+    wire [12:0] coarse_gain = {3'b0, gain_delta[17:8]};
+    wire [12:0] rounded_gain = coarse_gain + {12'b0, gain_delta[7]};
+    wire [18:0] seed_double = {fine_work, 1'b0};
+    wire [19:0] seed_difference = {1'b0, seed_double} - {2'b0, fine_divisor};
+    wire seed_bit = !seed_difference[19];
+    wire [17:0] seed_next_rem = seed_bit ? seed_difference[17:0] : seed_double[17:0];
     wire [6:0] seed_next_code = {seed_code[5:0], seed_bit};
 
     wire [23:0] next_phase = target_phase + {7'b0, ratio_q12};
@@ -101,9 +112,13 @@ module cpz4_loop_control (
     wire phase_close = phase_error >= -24'sd1024 && phase_error <= 24'sd1024;
     wire phase_far = phase_error < -24'sd2048 || phase_error > 24'sd2048;
     wire [25:0] normalized_error = {error_magnitude, 12'b0} >> gain_exponent;
-    wire [25:0] p_magnitude = locked ? (normalized_error >> 1) >> tracking_gear :
+    // One extra bandwidth reduction for the channels nearest an integer.
+    wire near_integer = ratio_q12[11:0] == 12'd1 || ratio_q12[11:0] == 12'd4095;
+    wire [1:0] locked_gear = narrow_near_integer && near_integer && tracking_gear == 2'd2 ?
+                             2'd3 : tracking_gear;
+    wire [25:0] p_magnitude = locked ? (normalized_error >> 1) >> locked_gear :
                                       normalized_error;
-    wire [20:0] i_magnitude = locked ? {2'b0, normalized_error[25:7]} >> {tracking_gear, 1'b0} :
+    wire [20:0] i_magnitude = locked ? {2'b0, normalized_error[25:7]} >> {locked_gear, 1'b0} :
                                       normalized_error[25:5];
     wire monitoring = state == TRACK || state == MANUAL;
 
@@ -168,15 +183,15 @@ module cpz4_loop_control (
             measure_left     <= 0;
             acquire_ticks    <= 0;
             anchor           <= 0;
-            best_distance    <= 0;
             fine_low_measure <= 0;
             low_code         <= 0;
             high_code        <= 0;
-            best_code        <= 0;
             monitor_active   <= 0;
             fine_retried     <= 0;
-            seed_rem         <= 0;
-            fine_span        <= 0;
+            extended_fine    <= 0;
+            fine_windows     <= 0;
+            fine_work        <= 0;
+            fine_divisor     <= 0;
             seed_code        <= 0;
             seed_left        <= 0;
             target_phase     <= 0;
@@ -224,14 +239,13 @@ module cpz4_loop_control (
                         settle_left    <= 4'd8;
                         low_code       <= 0;
                         high_code      <= 0;
-                        best_distance  <= 24'hffffff;
-                        best_code      <= 0;
                         locked         <= 0;
                         fault_code     <= 0;
                         gain_q12       <= 0;
                         acquire_ticks  <= 0;
                         monitor_active <= 0;
                         fine_retried   <= 0;
+                        extended_fine  <= 0;
                     end
                 end
                 SETTLE: begin
@@ -239,6 +253,8 @@ module cpz4_loop_control (
                     else if (phase_valid) begin
                         anchor       <= phase_q12;
                         measure_left <= 5'd31;
+                        fine_windows <= 0;
+                        if (accumulate_fine) fine_work <= 0;
                         state        <= MEASURE;
                     end
                 end
@@ -249,11 +265,13 @@ module cpz4_loop_control (
                         trip(START_STALLED);
                     else if (speed_upper > (measurement <= SEARCH ? COARSE_LIMIT : CLOCK_LIMIT))
                         trip(SPEED_GUARD);
+                    else if (accumulate_fine && fine_windows != 2'd3) begin
+                        fine_work    <= fine_total;
+                        fine_windows <= fine_windows + 2'd1;
+                        anchor       <= phase_q12;
+                        measure_left <= 5'd31;
+                    end
                     else begin
-                        if (!manual && measurement <= SEARCH && better_code) begin
-                            best_distance <= distance;
-                            best_code     <= dco_code;
-                        end
                         settle_left <= 4'd8;
                         state       <= SETTLE;
 
@@ -272,7 +290,7 @@ module cpz4_loop_control (
                                 end else begin
                                     high_code <= dco_code;
                                     if (measurement == LOW_RAIL || below_target || ramp_span <= 8'd1)
-                                        probe_fine(nearest_code);
+                                        probe_fine(dco_code);
                                     else begin
                                         measurement <= SEARCH;
                                         dco_code    <= low_code + (ramp_span >> 1);
@@ -282,42 +300,44 @@ module cpz4_loop_control (
                             SEARCH: begin
                                 low_code  <= next_low;
                                 high_code <= next_high;
-                                if (next_span <= 8'd1) probe_fine(nearest_code);
+                                if (next_span <= 8'd1) probe_fine(dco_code);
                                 else dco_code <= next_low + (next_span >> 1);
                             end
                             FINE_LOW: begin
-                                if (observed_delta > target_delta) begin
+                                if ({1'b0, fine_measured} > fine_target) begin
                                     if (!fine_retried && dco_code > low_code) begin
                                         fine_retried <= 1;
                                         probe_fine(low_code);
                                     end else trip(dco_code == 0 ? LOW_RANGE : FINE_RANGE);
                                 end else begin
-                                    fine_low_measure <= observed_delta;
+                                    fine_low_measure <= fine_measured;
                                     measurement      <= FINE_HIGH;
                                     fine_code        <= FINE_MAX;
                                 end
                             end
                             FINE_HIGH: begin
-                                if (observed_delta <= fine_low_measure || rounded_gain < 24'd4 ||
-                                    rounded_gain > 24'd8191) trip(BAD_GAIN);
-                                else if (observed_delta < target_delta) begin
+                                if (!extended_fine && (!positive_gain || gain_delta < EXTEND_FINE_SPAN)) begin
+                                    extended_fine <= 1;
+                                    probe_fine(dco_code);
+                                end else if (!positive_gain || gain_delta < MIN_FINE_SPAN) trip(BAD_GAIN);
+                                else if ({1'b0, fine_measured} < fine_target) begin
                                     if (!fine_retried && dco_code < high_code) begin
                                         fine_retried <= 1;
                                         probe_fine(high_code);
                                     end else trip(dco_code == code_ceiling ? HIGH_RANGE : FINE_RANGE);
-                                end else if (observed_delta == target_delta) begin
-                                    gain_q12      <= rounded_gain[12:0];
-                                    gain_exponent <= highest_bit(rounded_gain[12:0]);
-                                    integrator    <= MAX_TUNE;
-                                    state         <= ALIGN;
                                 end else begin
-                                    gain_q12      <= rounded_gain[12:0];
-                                    gain_exponent <= highest_bit(rounded_gain[12:0]);
-                                    fine_span     <= gain_delta;
-                                    seed_rem      <= target_delta - fine_low_measure;
-                                    seed_code     <= 0;
-                                    seed_left     <= 3'd7;
-                                    state         <= SEED;
+                                    gain_q12      <= rounded_gain;
+                                    gain_exponent <= highest_bit(coarse_gain);
+                                    if ({1'b0, fine_measured} == fine_target) begin
+                                        integrator <= MAX_TUNE;
+                                        state      <= ALIGN;
+                                    end else begin
+                                        fine_divisor <= gain_delta;
+                                        fine_work <= fine_target[17:0] - fine_low_measure;
+                                        seed_code <= 0;
+                                        seed_left <= 3'd7;
+                                        state     <= SEED;
+                                    end
                                 end
                             end
                             default: state <= START;
@@ -326,7 +346,7 @@ module cpz4_loop_control (
                 end
                 SEED: begin
                     // Seven restoring-division steps give the initial fine code.
-                    seed_rem  <= seed_next_rem;
+                    fine_work <= seed_next_rem;
                     seed_code <= seed_next_code;
                     seed_left <= seed_left - 3'd1;
                     if (seed_left == 3'd1) begin
