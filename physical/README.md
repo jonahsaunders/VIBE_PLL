@@ -94,6 +94,20 @@ relock time using schematic-based frequency and phase tables. The extracted
 oscillator needs a new plant table and closed-loop replay after tuning
 closure.
 
+## Routing status
+
+The first run to clear macro pin access reached detailed routing after
+global routing reported 97 overflow units. It completed three detailed
+passes with 15,811, 13,137, and 12,195 violations. The runner reached its
+35-minute limit during the next pass. The artifact contains the placed DEF,
+clock trees, power routes, guides, and congestion reports.
+[OpenROAD run and placement outputs](https://github.com/jonahsaunders/VIBE_PLL/actions/runs/43351731743/artifacts/14006007096)
+
+The CI route uses a bounded detailed-routing pass to publish a review layout
+when the router finishes with violations. For the complete local run,
+leave DETAIL_ROUTE_ITERATIONS unset. The review layout is labeled
+`cpz4_sky130-review.gds` when any configured route checks fail.
+
 ## Harness integration
 
 Use the official Chipalooza #4 slot outline, supply connections and approved
