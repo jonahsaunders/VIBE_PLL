@@ -25,7 +25,8 @@ def main():
     layout = build / "cpz4_sky130-review.gds"
     reference = build / "cpz4_sky130_lvs.spice"
     summary = {"top": "cpz4_sky130", "route_exit_code": a.route_exit_code,
-               "enabled_drc_groups": ["feol", "beol", "offgrid"], "passed": False}
+               "enabled_drc_groups": ["feol", "beol", "offgrid"],
+               "lvs_geometry_mode": "flat", "passed": False}
     result = build / "physical-verification.json"
     report = build / "pll-drc.lyrdb"
     for stale in (result, report, build / "pll-lvs.lvsdb", build / "pll-lvs.log",
@@ -42,9 +43,10 @@ def main():
         summary["drc_markers"] = len(ET.parse(report).findall("./items/item"))
         deck = build / "sky130-portable.lvs"
         normalize_lvs(decks / "lvs/sky130.lvs", deck)
-        # Flatten both connectivity graphs after hierarchical device
-        # extraction. This checks real supply/tie-cell pin equivalences
-        # across boundaries without treating the cells as black boxes.
+        # Extract the full physical geometry flat so substrate junctions
+        # and shared standard-cell wells are evaluated in their real
+        # top-level surroundings. This also avoids hierarchy-dependent
+        # diode omissions in older KLayout releases. No device is waived.
         text = deck.read_text()
         section = "#=== FLATTEN CELLS ===\nalign"
         if section not in text:
@@ -59,7 +61,7 @@ def main():
         run(a.klayout, build, "pll-lvs", deck,
             {"input": layout, "schematic": reference, "report": build / "pll-lvs.lvsdb",
              "target_netlist": build / "pll-extracted.spice", "lvs_sub": "vss",
-             "schematic_simplify": "true", "thr": 4})
+             "schematic_simplify": "true", "run_mode": "flat", "thr": 4})
         summary["lvs_match"] = "Netlists match." in (build / "pll-lvs.log").read_text()
         route_drc = int((build / "route-violations.txt").read_text().strip())
         route_checks = (build / "route-checks.txt").read_text()
