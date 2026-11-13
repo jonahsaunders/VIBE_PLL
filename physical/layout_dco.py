@@ -212,7 +212,12 @@ class Layout:
         if set(ports) != set(self.pins):
             raise ValueError(f"Pin mismatch, missing {set(ports) - set(self.pins)}, extra {set(self.pins) - set(ports)}")
         self.rect("boundary", 0, 0, WIDTH, HEIGHT)
-        self.layout.write(str(output / f"{TOP}.gds"))
+        if self.cell.bbox() != db.Box(0, 0, WIDTH, HEIGHT):
+            raise ValueError(f"DCO shapes exceed the declared boundary: {self.cell.bbox()}")
+        options = db.SaveLayoutOptions()
+        options.set_format_from_filename(f"{TOP}.gds")
+        options.gds2_write_timestamps = False
+        self.layout.write(str(output / f"{TOP}.gds"), options)
         lines = ['VERSION 5.7 ;', 'BUSBITCHARS "[]" ;', 'DIVIDERCHAR "/" ;',
                  f"MACRO {TOP}", "  CLASS BLOCK ;", "  ORIGIN 0 0 ;",
                  f"  SIZE {WIDTH / 1000:g} BY {HEIGHT / 1000:g} ;"]
@@ -259,7 +264,7 @@ def dac_rows(devices, bank):
 
 def draw_dac(layout, devices):
     y = 2_350
-    supply_rails = []
+    rail_start = {}
     for bank in ("coarse", "fine"):
         for row in dac_rows(devices, bank):
             height = max(switch.dimension("w") for _, _, switch in row)
@@ -275,7 +280,8 @@ def draw_dac(layout, devices):
             layout.via(2, VREF_X, bias_y)
             layout.via(2, drain_x, drain_y)
             layout.via(2, VSS_X, ground_y)
-            supply_rails.append((bias_y, drain_y, ground_y))
+            for rail_x, rail_y in ((VREF_X, bias_y), (drain_x, drain_y), (VSS_X, ground_y)):
+                rail_start.setdefault(rail_x, rail_y)
             # Strap the p-substrate at both ends and at regular interior gaps.
             tap_y = ground_y + 490
             tap_locations = [LEFT - 650, RIGHT + 440] + [gate_x - 390 for gate_x, _, _ in row[1::4]]
@@ -310,9 +316,8 @@ def draw_dac(layout, devices):
                 layout.stack(1, 3, gs)
                 layout.pin(switch.nets[1], "met3", pin_x, pin_y, 340, 340)
             y += height + 2_750
-    for x in (VSS_X, VREF_X, BP_X, FINE_BP_X):
-        rail_points = [r[0 if x == VREF_X else 2 if x == VSS_X else 1] for r in supply_rails]
-        layout.wire("met3", (x, min(rail_points)), (x, y), 480 if x == VSS_X else 360)
+    for x, bottom in rail_start.items():
+        layout.wire("met3", (x, bottom), (x, y), 480 if x == VSS_X else 360)
     return y
 
 

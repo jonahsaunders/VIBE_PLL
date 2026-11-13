@@ -16,13 +16,33 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           persist-credentials: false
+      - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: openroad-cache
+        with:
+          path: /tmp/vibe-openroad.tar
+          key: openroad-orfs-linux-amd64-73275384ed91270
+      - name: Load pinned OpenROAD image
+        run: |
+          image=openroad/orfs@sha256:73275384ed91270ea0e5f47710b3c2ff1b91708440c0744208ff226b751f88a0
+          if [[ -f /tmp/vibe-openroad.tar ]]; then
+            docker load -i /tmp/vibe-openroad.tar
+          else
+            docker pull "$image"
+            docker tag "$image" vibe-openroad:standalone
+            docker save vibe-openroad:standalone -o /tmp/vibe-openroad.tar
+          fi
+      - uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
+        if: steps.openroad-cache.outputs.cache-hit != 'true'
+        with:
+          path: /tmp/vibe-openroad.tar
+          key: openroad-orfs-linux-amd64-73275384ed91270
       - name: Route standalone PLL
         run: |
           mkdir -p build/standalone
           docker run --rm --platform linux/amd64 \
             --volume "$GITHUB_WORKSPACE:/project" --workdir /project \
             --entrypoint /bin/bash \
-            openroad/orfs@sha256:73275384ed91270ea0e5f47710b3c2ff1b91708440c0744208ff226b751f88a0 \
+            vibe-openroad:standalone \
             -lc 'export PATH="/OpenROAD-flow-scripts/tools/install/OpenROAD/bin:/OpenROAD-flow-scripts/tools/install/yosys/bin:$PATH";
                  if ! command -v openroad; then
                    binary=$(find /OpenROAD-flow-scripts /opt /usr/local -type f -name openroad -print -quit);

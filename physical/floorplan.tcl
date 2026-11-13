@@ -71,7 +71,8 @@ if {$detailed || $global_only} {
             }
         }
         source [file join $here power.tcl]
-        tapcell -distance 14 -tapcell_master sky130_fd_sc_hd__tapvpwrvgnd_1
+        tapcell -distance 14 -halo_width_x $halo -halo_width_y $halo \
+            -tapcell_master sky130_fd_sc_hd__tapvpwrvgnd_1
         repair_tie_fanout -separation 5 sky130_fd_sc_hd__conb_1/HI
         repair_tie_fanout -separation 5 sky130_fd_sc_hd__conb_1/LO
     }
@@ -100,6 +101,11 @@ if {$detailed || $global_only} {
         }
         global_connect
         detailed_route -output_drc [file join $out route-drc.rpt]
+        set route_violations [detailed_route_num_drvs]
+        set count [open [file join $out route-violations.txt] w]
+        puts $count $route_violations
+        close $count
+        puts "Detailed route DRC violations: $route_violations"
         write_def [file join $out routed.def]
         write_db [file join $out routed.odb]
         write_verilog [file join $out routed.v]

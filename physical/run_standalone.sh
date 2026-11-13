@@ -30,7 +30,7 @@ fi
 "$openroad" -exit "$root/physical/floorplan.tcl" 2>&1 | tee "$build/openroad.log"
 test -s "$build/routed.def"
 test -s "$build/routed.odb"
-if [[ -s "$build/route-drc.rpt" ]]; then
+if [[ $(cat "$build/route-violations.txt") != 0 ]]; then
     echo "Review detailed route DRC in $build/route-drc.rpt" >&2
     exit 1
 fi
