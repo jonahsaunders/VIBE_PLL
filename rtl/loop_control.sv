@@ -78,8 +78,10 @@ module cpz4_loop_control (
                                 {12'b0, |observed_delta[11:0]};
     wire [16:0] speed_operand = state == START ? ratio_q12 : {4'b0, cycles_ceiling};
     wire [22:0] speed_upper = speed_operand * ref_upper_mhz;
-    wire [22:0] step_headroom = speed_upper < COARSE_LIMIT ? COARSE_LIMIT - speed_upper : 0;
-    wire [4:0] safe_steps = step_headroom[13:9];
+    // COARSE_LIMIT is an exact multiple of the 512-unit step budget.
+    // Subtract the ceiling in steps, which avoids a 23-bit subtractor.
+    wire [14:0] guarded_step_count = {1'b0, speed_upper[22:9]} + {14'b0, |speed_upper[8:0]};
+    wire [4:0] safe_steps = speed_upper < COARSE_LIMIT ? 5'd23 - guarded_step_count[4:0] : 5'd0;
     wire [4:0] ramp_step = dco_code < 8'd32 ? 5'd8 : 5'd16;
     wire [4:0] guarded_step = safe_steps < ramp_step ? safe_steps : ramp_step;
     wire [8:0] ramp_sum = {1'b0, dco_code} + {4'b0, guarded_step};

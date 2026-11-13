@@ -1,0 +1,35 @@
+name: Sky130 standalone route
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [physical-bringup]
+
+permissions:
+  contents: read
+
+jobs:
+  route:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Route standalone PLL
+        run: |
+          mkdir -p build/standalone
+          docker run --rm --platform linux/amd64 \
+            --volume "$GITHUB_WORKSPACE:/project" --workdir /project \
+            --entrypoint /bin/bash \
+            openroad/orfs@sha256:73275384ed91270ea0e5f47710b3c2ff1b91708440c0744208ff226b751f88a0 \
+            -lc 'python3 -m venv /tmp/vibe-layout &&
+                 /tmp/vibe-layout/bin/pip install klayout==0.30.13 &&
+                 PYTHON=/tmp/vibe-layout/bin/python bash physical/run_standalone.sh build/standalone'
+      - name: Upload route outputs and diagnostics
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: sky130-standalone
+          path: build/standalone
+          if-no-files-found: warn

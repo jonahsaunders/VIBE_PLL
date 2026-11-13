@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-# Initialize a standalone floorplan and optionally run placement/global routing.
+# Initialize a standalone floorplan and optionally run detailed routing.
 # The DCO LEF must come from the real DCO layout, including pins and OBS.
 foreach name {TECH_LEF CELLS_LEF LIBERTY DCO_LEF MAPPED_VERILOG OUT_DIR} {
     if {![info exists ::env($name)] || $::env($name) eq ""} {
@@ -31,7 +31,7 @@ if {$dco eq "NULL"} { error "The mapped netlist must instantiate oscillator" }
 set master [$dco getMaster]
 set dbu [$block getDbUnitsPerMicron]
 set halo 5
-set max_dco {100 100}
+set max_dco {140 115}
 if {[info exists ::env(DCO_HALO_UM)]} { set halo $::env(DCO_HALO_UM) }
 if {[info exists ::env(DCO_RESERVE)]} { set max_dco $::env(DCO_RESERVE) }
 set width [expr {double([$master getWidth]) / $dbu}]
@@ -54,7 +54,9 @@ odb::dbBlockage_create $block \
 
 read_sdc [file join $here standalone.sdc]
 write_def [file join $out floorplan.def]
-if {[info exists ::env(RUN_GLOBAL_ROUTE)] && $::env(RUN_GLOBAL_ROUTE) eq "1"} {
+set detailed [expr {[info exists ::env(RUN_DETAIL_ROUTE)] && $::env(RUN_DETAIL_ROUTE) eq "1"}]
+set global_only [expr {[info exists ::env(RUN_GLOBAL_ROUTE)] && $::env(RUN_GLOBAL_ROUTE) eq "1"}]
+if {$detailed || $global_only} {
     # Use the Sky130 HD track grid instead of a generic LEF default.
     make_tracks li1  -x_offset 0.23 -x_pitch 0.46 -y_offset 0.17 -y_pitch 0.34
     make_tracks met1 -x_offset 0.17 -x_pitch 0.34 -y_offset 0.17 -y_pitch 0.34
@@ -62,12 +64,58 @@ if {[info exists ::env(RUN_GLOBAL_ROUTE)] && $::env(RUN_GLOBAL_ROUTE) eq "1"} {
     make_tracks met3 -x_offset 0.34 -x_pitch 0.68 -y_offset 0.34 -y_pitch 0.68
     make_tracks met4 -x_offset 0.46 -x_pitch 0.92 -y_offset 0.46 -y_pitch 0.92
     make_tracks met5 -x_offset 1.70 -x_pitch 3.40 -y_offset 1.70 -y_pitch 3.40
+    if {$detailed} {
+        foreach net {VDD_CORE VDD_DCO VSS} {
+            if {[$block findNet $net] eq "NULL"} {
+                error "Expected top-level supply net $net"
+            }
+        }
+        source [file join $here power.tcl]
+        tapcell -distance 14 -tapcell_master sky130_fd_sc_hd__tapvpwrvgnd_1
+        repair_tie_fanout -separation 5 sky130_fd_sc_hd__conb_1/HI
+        repair_tie_fanout -separation 5 sky130_fd_sc_hd__conb_1/LO
+    }
     place_pins -hor_layers met3 -ver_layers met2
     global_placement -density 0.65
     detailed_placement
     check_placement -verbose
-    set_routing_layers -signal met1-met5
+    set_routing_layers -signal met1-met5 -clock met2-met5
+    if {$detailed} {
+        if {[info exists ::env(SKY130_SET_RC)]} { source $::env(SKY130_SET_RC) }
+        pdngen
+        clock_tree_synthesis -root_buf sky130_fd_sc_hd__clkbuf_4 \
+            -buf_list {sky130_fd_sc_hd__clkbuf_2 sky130_fd_sc_hd__clkbuf_4}
+        set_propagated_clock [all_clocks]
+        detailed_placement
+    }
     global_route -guide_file [file join $out pll.guide]
     write_def [file join $out placed.def]
     report_checks -path_delay min_max -group_path_count 5
+    if {$detailed} {
+        repair_antennas sky130_fd_sc_hd__diode_2
+        detailed_placement
+        filler_placement {
+            sky130_fd_sc_hd__fill_8 sky130_fd_sc_hd__fill_4
+            sky130_fd_sc_hd__fill_2 sky130_fd_sc_hd__fill_1
+        }
+        global_connect
+        detailed_route -output_drc [file join $out route-drc.rpt]
+        write_def [file join $out routed.def]
+        write_db [file join $out routed.odb]
+        write_verilog [file join $out routed.v]
+        check_antennas -report_file [file join $out antenna.rpt]
+        foreach net {VDD_CORE VDD_DCO VSS} {
+            check_power_grid -net $net
+        }
+        if {[info exists ::env(RCX_RULES)]} {
+            extract_parasitics -ext_model_file $::env(RCX_RULES)
+            set spef [file join $out routed.spef]
+            write_spef $spef
+            read_spef $spef
+        }
+        report_checks -path_delay min_max -group_path_count 10
+        report_worst_slack -max
+        report_worst_slack -min
+        report_tns
+    }
 }

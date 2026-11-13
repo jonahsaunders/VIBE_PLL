@@ -105,24 +105,26 @@ module cpz4_pll #(
 
     // Register each cell command to avoid decoder glitches during binary carries.
     // Clamp the common coarse command before the 255 registered decodes.
-    wire [7:0] applied_coarse = dco_code < code_ceiling ? dco_code : code_ceiling;
+    // The loop clamps its coarse command. The DAC itself is disabled
+    // asynchronously by run_n. While disabled, clock a zero command into
+    // the output registers before the analog bias can restart.
+    wire [7:0] applied_coarse = !run_n ? 8'b0 : (dco_code < code_ceiling ? dco_code : code_ceiling);
+    wire [7:0] applied_fine = run_n ? fine_code : 8'b0;
     genvar unit_id;
     generate
         for (unit_id = 0; unit_id < 255; unit_id = unit_id + 1) begin : unit_decoder
             localparam [7:0] THRESHOLD = 8'(unit_id);
             reg unit_enable;
-            always @(posedge ref_clk or negedge run_n) begin
-                if (!run_n) unit_enable <= 1'b0;
-                else        unit_enable <= applied_coarse > THRESHOLD;
+            always @(posedge ref_clk) begin
+                unit_enable <= applied_coarse > THRESHOLD;
             end
             assign dco_therm[unit_id] = unit_enable;
         end
         for (unit_id = 0; unit_id < 128; unit_id = unit_id + 1) begin : fine_decoder
             localparam [7:0] THRESHOLD = 8'(unit_id);
             reg unit_enable;
-            always @(posedge ref_clk or negedge run_n) begin
-                if (!run_n) unit_enable <= 1'b0;
-                else        unit_enable <= fine_code > THRESHOLD;
+            always @(posedge ref_clk) begin
+                unit_enable <= applied_fine > THRESHOLD;
             end
             assign dco_fine_therm[unit_id] = unit_enable;
         end
