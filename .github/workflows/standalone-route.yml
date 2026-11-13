@@ -90,6 +90,7 @@ jobs:
           mkdir -p build/standalone
           docker run --rm --platform linux/amd64 \
             --volume "$GITHUB_WORKSPACE:/project" --workdir /project \
+            --env DETAIL_ROUTE_ITERATIONS=24 \
             --entrypoint /bin/bash \
             openroad/orfs@sha256:73275384ed91270ea0e5f47710b3c2ff1b91708440c0744208ff226b751f88a0 \
             -lc 'export PATH="/OpenROAD-flow-scripts/tools/install/OpenROAD/bin:/OpenROAD-flow-scripts/tools/install/yosys/bin:$PATH";

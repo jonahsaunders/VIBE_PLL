@@ -96,7 +96,7 @@ if {$detailed || $global_only} {
         connect_dco_supply $block $dco $dbu
     }
     place_pins -hor_layers met3 -ver_layers met2
-    global_placement -density 0.65
+    global_placement -routability_driven -density 0.65
     detailed_placement
     check_placement -verbose
     set_routing_layers -signal met1-met5 -clock met2-met5
@@ -124,10 +124,6 @@ if {$detailed || $global_only} {
             repair_antennas sky130_fd_sc_hd__diode_2
         }
         detailed_placement
-        filler_placement {
-            sky130_fd_sc_hd__fill_8 sky130_fd_sc_hd__fill_4
-            sky130_fd_sc_hd__fill_2 sky130_fd_sc_hd__fill_1
-        }
         global_connect
         set detail_args [list -output_drc [file join $out route-drc.rpt] \
             -drc_report_iter_step 8]
@@ -136,6 +132,11 @@ if {$detailed || $global_only} {
         }
         detailed_route {*}$detail_args
         set route_violations [detailed_route_num_drvs]
+        filler_placement {
+            sky130_fd_sc_hd__fill_8 sky130_fd_sc_hd__fill_4
+            sky130_fd_sc_hd__fill_2 sky130_fd_sc_hd__fill_1
+        }
+        global_connect
         set count [open [file join $out route-violations.txt] w]
         puts $count $route_violations
         close $count
