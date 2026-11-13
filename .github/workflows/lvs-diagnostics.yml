@@ -1,0 +1,35 @@
+name: Inspect saved LVS report
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: Standalone route workflow run ID
+        default: '43485032506'
+        required: true
+  push:
+    branches: [physical-bringup]
+    paths: ['physical/diagnose_lvs.py', '.github/workflows/lvs-diagnostics.yml']
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  inspect:
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.event.head_commit.message, 'Diagnose ')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RUN_ID: ${{ inputs.run_id || '43485032506' }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Inspect artifact connectivity
+        run: |
+          gh run download "$RUN_ID" --name sky130-standalone --dir build/inspect
+          python3 -m venv "$RUNNER_TEMP/lvs-inspect"
+          "$RUNNER_TEMP/lvs-inspect/bin/pip" install klayout==0.30.13
+          "$RUNNER_TEMP/lvs-inspect/bin/python" physical/diagnose_lvs.py build/inspect/pll-lvs.lvsdb

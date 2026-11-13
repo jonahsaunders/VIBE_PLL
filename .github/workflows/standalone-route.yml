@@ -12,6 +12,7 @@ permissions:
 
 jobs:
   rtl:
+    if: "!startsWith(github.event.head_commit.message, 'Diagnose ')"
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -27,6 +28,7 @@ jobs:
           python3 tests/run_rtl.py
           python3 tests/run_rtl.py --fixed-centers --tracking-replicas --spice-data results/rev2-tt.csv --phase-shape results/rev4-tt-tracking-probe.csv
   oscillator:
+    if: "!startsWith(github.event.head_commit.message, 'Diagnose ')"
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
@@ -96,6 +98,7 @@ jobs:
           path: build/oscillator
           if-no-files-found: warn
   route:
+    if: "!startsWith(github.event.head_commit.message, 'Diagnose ')"
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     steps:
