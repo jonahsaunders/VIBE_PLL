@@ -255,9 +255,11 @@ class Layout:
         lines += ["  OBS", "    LAYER li1 ;", f"      RECT 0 0 {self.width / 1000:g} {self.height / 1000:g} ;"]
         for metal in ("met1", "met2", "met3", "met4", "met5"):
             metal_region = db.Region(self.cell.shapes(self.layers[metal]))
-            # Internal lower-layer whitespace is not a routing channel. In
-            # particular, an access wire must not squeeze beside a tap trunk.
-            if metal in ("met1", "met2", "met3"):
+            # Protect device routing below the signal access layer. Metal3
+            # must retain its real whitespace: short tap pins need a lateral
+            # escape to an on-grid metal4 via. A blanket metal3 obstruction
+            # leaves these manufactured pins with no legal access point.
+            if metal in ("met1", "met2"):
                 metal_region = db.Region(db.Box(0, 0, self.width, self.height))
             pins = [db.Box(*box) for name, shapes in exposed.items()
                     for layer, box in shapes if layer == metal and
