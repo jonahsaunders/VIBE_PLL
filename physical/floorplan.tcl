@@ -129,7 +129,12 @@ if {$detailed || $global_only} {
             sky130_fd_sc_hd__fill_2 sky130_fd_sc_hd__fill_1
         }
         global_connect
-        detailed_route -output_drc [file join $out route-drc.rpt]
+        set detail_args [list -output_drc [file join $out route-drc.rpt] \
+            -drc_report_iter_step 8]
+        if {[info exists ::env(DETAIL_ROUTE_ITERATIONS)]} {
+            lappend detail_args -droute_end_iter $::env(DETAIL_ROUTE_ITERATIONS)
+        }
+        detailed_route {*}$detail_args
         set route_violations [detailed_route_num_drvs]
         set count [open [file join $out route-violations.txt] w]
         puts $count $route_violations
@@ -152,10 +157,13 @@ if {$detailed || $global_only} {
             }
         }
         if {[info exists ::env(RCX_RULES)]} {
+            define_process_corner -ext_model_index 0 sky130_tt
             extract_parasitics -ext_model_file $::env(RCX_RULES)
             set spef [file join $out routed.spef]
             write_spef $spef
             read_spef $spef
+        } else {
+            estimate_parasitics -global_routing
         }
         report_checks -path_delay min_max -group_path_count 10
         report_worst_slack -max

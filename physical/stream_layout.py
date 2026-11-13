@@ -21,6 +21,9 @@ def main():
     options = tech.load_layout_options
     lefdef = options.lefdef_config
     lefdef.lef_files = [str(path.resolve()) for path in args.lef]
+    lefdef.produce_placement_blockages = False
+    lefdef.produce_blockages = False
+    lefdef.produce_regions = False
     options.lefdef_config = lefdef
     layout = db.Layout()
     layout.read(str(args.route_def), options)
@@ -38,7 +41,10 @@ def main():
     missing = [cell.name for cell in merged.each_cell() if cell.is_empty()]
     if missing:
         raise ValueError(f"Missing physical cell views: {', '.join(sorted(missing))}")
-    merged.write(str(args.output))
+    save = db.SaveLayoutOptions()
+    save.set_format_from_filename(str(args.output))
+    save.gds2_write_timestamps = False
+    merged.write(str(args.output), save)
     print(f"Merged standalone layout: {args.output}")
 
 

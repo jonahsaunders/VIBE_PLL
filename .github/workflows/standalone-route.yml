@@ -4,6 +4,8 @@ on:
   workflow_dispatch:
   push:
     branches: [physical-bringup]
+    paths-ignore:
+      - '**/*.md'
 
 permissions:
   contents: read
