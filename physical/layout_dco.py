@@ -227,13 +227,17 @@ class Layout:
             lines += [f"  PIN {lef_name(name)}", f"    DIRECTION {direction} ;",
                       f"    USE {use} ;", "    PORT"]
             for metal, box in self.pins[name]:
+                if use != "SIGNAL" and metal != "met5":
+                    continue
                 lines += [f"      LAYER {metal} ;", "        RECT " +
                           " ".join(f"{value / 1000:g}" for value in box) + " ;"]
             lines += ["    END", f"  END {lef_name(name)}"]
         lines += ["  OBS", "    LAYER li1 ;", f"      RECT 0 0 {WIDTH / 1000:g} {HEIGHT / 1000:g} ;"]
         for metal in ("met1", "met2", "met3", "met4", "met5"):
             metal_region = db.Region(self.cell.shapes(self.layers[metal]))
-            pins = [db.Box(*box) for shapes in self.pins.values() for layer, box in shapes if layer == metal]
+            pins = [db.Box(*box) for name, shapes in self.pins.items()
+                    for layer, box in shapes if layer == metal and
+                    (name not in ("vdd", "vss") or metal == "met5")]
             if pins:
                 metal_region -= db.Region(pins)
             if metal_region.is_empty():
@@ -313,8 +317,11 @@ def draw_dac(layout, devices):
                 layout.wire("met1", ss, (ss[0], ground_y), 320)
                 layout.via(1, ss[0], ground_y)
                 pin_x, pin_y = gs
-                layout.stack(1, 3, gs)
-                layout.pin(switch.nets[1], "met3", pin_x, pin_y, 340, 340)
+                layout.stack(1, 4, gs)
+                layout.landing("met3", pin_x, pin_y, 340, 720)
+                layout.pin(switch.nets[1], "met3", pin_x, pin_y, 340, 720)
+                layout.landing("met4", pin_x, pin_y, 1_300, 400)
+                layout.port_shape(switch.nets[1], "met4", pin_x, pin_y, 1_300, 400, label=False)
             y += height + 2_750
     for x, bottom in rail_start.items():
         layout.wire("met3", (x, bottom), (x, y), 480 if x == VSS_X else 360)
@@ -367,6 +374,7 @@ def draw_core(layout, devices, start_y):
                 endpoint = (track, landing)
                 layout.wire("met2", escape, endpoint, 300)
                 layout.stack(2, 4, endpoint)
+                layout.landing("met3", *endpoint, 380, 660)
                 append(net, 4, endpoint)
             else:
                 append(net, 2, escape)
@@ -434,6 +442,8 @@ def route_core(layout, points, ports, n_landing, p_landing):
         y = channels[net]
         lo, hi = min(x for _, x, _ in terminals), max(x for _, x, _ in terminals)
         layout.wire("met3", (lo, y), (hi, y), 340)
+        if lo == hi:
+            layout.landing("met3", lo, y, 660, 380)
         for metal, x, point_y in terminals:
             if metal == 4:
                 layout.wire("met4", (x, point_y), (x, y), 340)
@@ -484,6 +494,7 @@ def main():
     # vertical connection at the right and left edges of the analog block.
     for net, x, y in (("vdd", VDD_X, HEIGHT - 850), ("vss", VSS_X, 83_530)):
         layout.via(4, x, y)
+        layout.landing("met3", x, y, 380, 660)
         pin_x = min(WIDTH - 1_350, max(1_350, x))
         layout.landing("met5", pin_x, y, 2_600, 1_600)
         layout.port_shape(net, "met5", pin_x, y, 2_600, 1_600, label=False)

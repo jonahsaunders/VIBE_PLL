@@ -5,6 +5,13 @@ add_global_connection -net VSS -pin_pattern {^(VGND|VNB)$} -ground
 add_global_connection -net VDD_DCO -inst_pattern {^oscillator$} -pin_pattern {^vdd$} -power
 add_global_connection -net VSS -inst_pattern {^oscillator$} -pin_pattern {^vss$} -ground
 global_connect
+foreach {pin supply} {vdd VDD_DCO vss VSS} {
+    set iterm [$dco findITerm $pin]
+    if {[$iterm getNet] ne [$block findNet $supply]} {
+        error "Oscillator $pin must be connected to $supply"
+    }
+    $iterm setSpecial
+}
 
 set_voltage_domain -name CORE -power VDD_CORE -ground VSS -secondary_power VDD_DCO
 define_pdn_grid -name core -voltage_domains CORE -pins {met5}

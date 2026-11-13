@@ -44,13 +44,23 @@ lassign $core left bottom right top
 if {$left + $reserve_width > $right || $bottom + $reserve_height > $top} {
     error "DCO reservation extends outside the core"
 }
-set x [expr {round(($left + $halo) * $dbu)}]
-set y [expr {round(($bottom + $halo) * $dbu)}]
+# Keep routing channels on both sides of the DAC array. Coordinates snap
+# to the 5 nm manufacturing grid, with digital sites cut around the halo.
+set x [expr {5 * round(($left + $right - $width) * $dbu / 10.0)}]
+set y [expr {5 * round(($bottom + ($top - $bottom) / 4.0) * $dbu / 5.0)}]
 $dco setLocation $x $y
 $dco setPlacementStatus FIRM
+set halo_dbu [expr {round($halo * $dbu)}]
+set macro_x1 [expr {$x - $halo_dbu}]
+set macro_y1 [expr {$y - $halo_dbu}]
+set macro_x2 [expr {$x + [$master getWidth] + $halo_dbu}]
+set macro_y2 [expr {$y + [$master getHeight] + $halo_dbu}]
+if {$macro_x1 < $left*$dbu || $macro_y1 < $bottom*$dbu ||
+    $macro_x2 > $right*$dbu || $macro_y2 > $top*$dbu} {
+    error "Placed DCO and halo extend outside the core"
+}
 odb::dbBlockage_create $block \
-    [expr {round($left*$dbu)}] [expr {round($bottom*$dbu)}] \
-    [expr {round(($left+$reserve_width)*$dbu)}] [expr {round(($bottom+$reserve_height)*$dbu)}]
+    $macro_x1 $macro_y1 $macro_x2 $macro_y2
 
 read_sdc [file join $here standalone.sdc]
 write_def [file join $out floorplan.def]
@@ -82,7 +92,7 @@ if {$detailed || $global_only} {
     if {$detailed} {
         if {[info exists ::env(SKY130_SET_RC)]} { source $::env(SKY130_SET_RC) }
         global_connect
-        pdngen -skip_trim
+        pdngen
         write_def [file join $out power.def]
         clock_tree_synthesis -root_buf sky130_fd_sc_hd__clkbuf_4 \
             -buf_list {sky130_fd_sc_hd__clkbuf_2 sky130_fd_sc_hd__clkbuf_4}
@@ -97,7 +107,9 @@ if {$detailed || $global_only} {
     write_def [file join $out placed.def]
     report_checks -path_delay min_max -group_path_count 5
     if {$detailed} {
-        repair_antennas sky130_fd_sc_hd__diode_2
+        if {[file size [file join $out congestion.rpt]] == 0} {
+            repair_antennas sky130_fd_sc_hd__diode_2
+        }
         detailed_placement
         filler_placement {
             sky130_fd_sc_hd__fill_8 sky130_fd_sc_hd__fill_4
