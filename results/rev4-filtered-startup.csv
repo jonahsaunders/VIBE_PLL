@@ -1,2 +1,3 @@
 corner,vdd,temp_c,code,fine_code,first_rising_edge_ns,shortest_period_ns,shortest_high_ns,shortest_low_ns,peak_frequency_mhz
 tt,1.8,25,52,64,475.307,3.89306,1.9538,1.93926,256.8676
+tt,1.8,25.0,0,64,544.866,9.24577,4.6037,4.64201,108.1576

@@ -160,21 +160,28 @@ def schematic(replica_strength=1.0, tracking_replicas=False, filtered_bias=False
     return "\n".join(lines)
 
 
+def dac_selects(code, destination, count, high, switched):
+    start, stop = sorted((code, destination))
+    return [high] * start + [switched] * (stop - start) + ["0"] * (count - stop)
+
+
 def dac_controls(code, destination, count, prefix, high, volts, step_s, skew_s):
+    switched = f"{prefix}_step"
+    selects = dac_selects(code, destination, count, high, switched)
     if destination == code:
-        return [high if index < code else "0" for index in range(count)], []
+        return selects, []
     start, stop = sorted((code, destination))
     initial, final = (0, volts) if destination > code else (volts, 0)
     changed = stop - start
-    switches, controls = [], []
+    controls = []
     for index in range(changed):
-        switched = f"{prefix}_step_{index}" if skew_s else f"{prefix}_step"
+        pin = f"{switched}_{index}" if skew_s else switched
         at = step_s + index * skew_s / max(1, changed - 1)
         if skew_s or index == 0:
-            controls.append(f"V{switched} {switched} 0 PWL(0 {initial} {at:.10g} {initial} "
+            controls.append(f"V{pin} {pin} 0 PWL(0 {initial} {at:.10g} {initial} "
                             f"{at + 100e-12:.10g} {final})")
-        switches.append(switched)
-    return [high] * start + switches + ["0"] * (count - stop), controls
+        selects[start + index] = pin
+    return selects, controls
 
 
 def make_deck(library, corner, volts, temperature, code, fine_code, aggregate=False,
@@ -194,8 +201,12 @@ def make_deck(library, corner, volts, temperature, code, fine_code, aggregate=Fa
               for i, tap in enumerate(FINE_TAP_PINS)]
     probes = " ".join(f"v({tap})" for tap in (*TAP_PINS, *FINE_TAP_PINS))
     if aggregate:
-        control = " control_high" if ripple_mv else ""
-        instance = f"Xosc vdd 0 enable{control} " + " ".join((*TAP_PINS, *FINE_TAP_PINS)) + " cpz4_dco"
+        extra_pins = ["control_high"] if ripple_mv else []
+        if coarse_control:
+            extra_pins.append("coarse_step")
+        if fine_control:
+            extra_pins.append("fine_step")
+        instance = " ".join(("Xosc", "vdd", "0", "enable", *extra_pins, *TAP_PINS, *FINE_TAP_PINS, "cpz4_dco"))
     else:
         instance = wrapped_line("Xosc", ("vdd", "0", "enable", *active_units, *fine_units,
                                         *TAP_PINS, *FINE_TAP_PINS), "cpz4_dco")
@@ -377,8 +388,8 @@ def supply_pushing(path, volts, ripple_mv, ripple_mhz, start=RIPPLE_START_S):
 
 
 def aggregate_dac(netlist, code, fine_code, library, corner, independent_supply=False,
-                  filtered_bias=False):
-    """Compress parallel devices in a static code sweep. Keep the production netlist intact."""
+                  filtered_bias=False, step_to=None):
+    """Compress identical devices sharing a select waveform for schematic simulation."""
     corner_file = library.parent / "corners" / f"{corner}.spice"
     include = next(line.split('"')[1] for line in corner_file.read_text().splitlines()
                    if re.search(r"sky130_fd_pr__nfet_01v8__(tt|ss|ff|sf|fs)\.pm3\.spice", line))
@@ -395,28 +406,40 @@ def aggregate_dac(netlist, code, fine_code, library, corner, independent_supply=
     lines = netlist.splitlines()
     high_select = "control_high" if independent_supply else "vdd"
     bias = "vbias" if filtered_bias else "vref"
+    final_coarse, final_fine = step_to if step_to else (code, fine_code)
+    coarse_select = dac_selects(code, final_coarse, len(THERM_PINS), high_select, "coarse_step")
+    fine_select = dac_selects(fine_code, final_fine, len(FINE_THERM_PINS), high_select, "fine_step")
     result = []
     index = 0
     while index < len(lines):
         line = lines[index]
         index += 1
         if line.startswith(".subckt cpz4_dco "):
-            control = " control_high" if independent_supply else ""
-            result.append(f".subckt cpz4_dco vdd vss enable{control} " + " ".join((*TAP_PINS, *FINE_TAP_PINS)))
+            extra_pins = ["control_high"] if independent_supply else []
+            if final_coarse != code:
+                extra_pins.append("coarse_step")
+            if final_fine != fine_code:
+                extra_pins.append("fine_step")
+            result.append(" ".join((".subckt", "cpz4_dco", "vdd", "vss", "enable", *extra_pins,
+                                    *TAP_PINS, *FINE_TAP_PINS)))
             while lines[index].startswith("+"):
                 index += 1
         elif line.startswith(("Xu", "Xfine_unit")):
             continue
         elif line == ".ends cpz4_dco":
-            remaining = code
+            offset = 0
             for group, (count, _, _) in enumerate(DAC_GROUPS):
-                active = min(remaining, count)
-                remaining -= active
-                for select, devices in ((high_select, active), ("vss", count - active)):
+                selected = coarse_select[offset:offset + count]
+                offset += count
+                for select in (high_select, "0", "coarse_step"):
+                    devices = selected.count(select)
                     if devices:
+                        select = "vss" if select == "0" else select
                         result.append(f"Xgroup{group}_{select} bp {bias} {select} vss cpz4_dac_unit_{group} cells={devices}")
-            for select, devices in ((high_select, fine_code), ("vss", len(FINE_THERM_PINS) - fine_code)):
+            for select in (high_select, "0", "fine_step"):
+                devices = fine_select.count(select)
                 if devices:
+                    select = "vss" if select == "0" else select
                     result.append(f"Xfine_{select} fine_bp {bias} {select} vss cpz4_dac_unit_0 cells={devices}")
             result.append(line)
         elif line.startswith(".subckt cpz4_dac_unit_"):
@@ -440,7 +463,7 @@ def run_case(args, code, fine_code):
         source = schematic(args.replica_strength, args.tracking_replicas, args.filtered_bias)
         if args.aggregate_dac:
             source = aggregate_dac(source, code, fine_code, args.lib, args.corner,
-                                   bool(args.supply_ripple_mv), args.filtered_bias)
+                                   bool(args.supply_ripple_mv), args.filtered_bias, args.step_to)
         (path / "cpz4_dco.spice").write_text(source, encoding="ascii")
         deck = make_deck(args.lib, args.corner, args.vdd, args.temp, code, fine_code, args.aggregate_dac,
                          args.added_tap_load_ff, args.supply_ripple_mv, args.supply_ripple_mhz,
@@ -525,7 +548,7 @@ def main():
     parser.add_argument("--codes", default="0,32,64,96,128,160,192,224,255")
     parser.add_argument("--fine-codes", default="64", help="comma-separated fine codes (0 through 128)")
     parser.add_argument("--aggregate-dac", action="store_true",
-                        help="use parallel multiplicity for static DAC codes, with mismatch disabled")
+                        help="group DAC devices with identical selects, with mismatch disabled")
     parser.add_argument("--timeout", type=int, default=480, help="seconds per SPICE case")
     parser.add_argument("--output", type=Path, help="write summary CSV to this path")
     parser.add_argument("--keep-waveform", type=Path, help="write waveform samples in this directory")
@@ -558,13 +581,15 @@ def main():
         parser.error("legacy replica strength must be at least one")
     if args.cold_start and args.supply_ripple_mv:
         parser.error("select either cold startup or supply ripple injection")
-    if args.step_to and (args.aggregate_dac or args.cold_start or args.supply_ripple_mv):
-        parser.error("--step-to uses individual DAC devices and its own transient bench")
+    if args.step_to and (args.cold_start or args.supply_ripple_mv):
+        parser.error("--step-to uses its own transient bench")
     if args.step_to and not (0 <= args.step_to[0] <= 255 and 0 <= args.step_to[1] <= 128):
         parser.error("--step-to requires a coarse code of 0..255 and a fine code of 0..128")
     if (not math.isfinite(args.step_skew_ps) or args.step_skew_ps < 0 or
         (args.step_skew_ps and not args.step_to)):
         parser.error("--step-skew-ps requires --step-to and a finite nonnegative delay")
+    if args.aggregate_dac and args.step_skew_ps:
+        parser.error("skewed code transitions require individual DAC devices")
     if args.emit:
         source = schematic(args.replica_strength, args.tracking_replicas, args.filtered_bias)
         args.emit.write_text(source, encoding="ascii", newline="\n")

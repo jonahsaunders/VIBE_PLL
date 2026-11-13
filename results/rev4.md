@@ -45,22 +45,42 @@ for ratio in 40959 40961; do
 done
 ```
 
+With the slow-cold replica probe and lookup table applied to the existing SS tuning curve, the loop locked at 300 MHz and relocked one step below it. The longest lock or relock was 58.72 µs with a 25 MHz reference and 45.88 µs with a 32 MHz reference. Both replays passed reference-loss holdover and recovery.
+
+```sh
+python tests/run_rtl.py --fixed-centers --tracking-replicas --slow-phase-profile \
+  --spice-data results/rev3-ss-cold.csv --phase-shape results/rev4-ss-tracking-probe.csv \
+  --ref 25 --start 49152 --retune 49151 --edge 41984
+python tests/run_rtl.py --fixed-centers --tracking-replicas --slow-phase-profile \
+  --spice-data results/rev3-ss-cold.csv --phase-shape results/rev4-ss-tracking-probe.csv \
+  --ref 32 --start 38400 --retune 38399 --edge 20480
+```
+
 ## Supply and startup
 
-The `--filtered-bias` schematic experiment inserts a high-resistance poly resistor and a MIM capacitor between the reference generator and the DAC bias gates. A discharge device clears the filtered bias in standby. In a TT test with the legacy replica cells, the filter reduced 2 MHz supply pushing from 139.02 to 55.05 MHz/V for a 10 mV peak tone. The filtered probe begins ripple injection at 1.8 µs to allow bias settling. [Supply data](rev4-supply-probes.csv)
+The `--filtered-bias` schematic experiment inserts a high-resistance poly resistor and a MIM capacitor between the reference generator and the DAC bias gates. A discharge device clears the filtered bias in standby. At TT, the measured 2 MHz supply pushing was 139.02 MHz/V for the legacy circuit, 55.05 MHz/V with the filter added to the legacy circuit, and 56.98 MHz/V with the filter and tracking replicas. All three used a 10 mV peak tone. The filtered probe begins ripple injection at 1.8 µs to allow bias settling. [Supply data](rev4-supply-probes.csv)
 
-With the nominal 256.25 MHz carrier and gear 2, the sampled loop model puts a 100 ps RMS allocation for that tone at 3.23 mV peak before filtering and 8.14 mV peak for the filtered probe. These are single-tone estimates.
+With the nominal 256.25 MHz carrier and gear 2, the sampled loop model puts a 100 ps RMS allocation for that tone at 3.23 mV peak for the legacy circuit and 7.87 mV peak for the combined prototype. These are single-tone estimates.
 
 ```sh
 model="$PDK_ROOT/sky130A/libs.tech/ngspice/sky130.lib.spice"
-python spice/dco_deck.py --lib "$model" --aggregate-dac --filtered-bias \
+python spice/dco_deck.py --lib "$model" --aggregate-dac --tracking-replicas --filtered-bias \
   --codes 52 --fine-codes 64 --supply-ripple-mv 10 --supply-ripple-mhz 2
-python analysis/loop_budget.py --supply-tone 2e6 55.053 10 --tone-budget-ps 100
+python analysis/loop_budget.py --supply-tone 2e6 56.98 10 --tone-budget-ps 100
 ```
 
 `python analysis/loop_budget.py --noise-spectra spectra.csv` reports reference, DCO, supply, and total RMS jitter for each tracking gear. Supply the same increasing offset grid for all columns. The CSV header is `offset_hz,reference_dbc_hz,dco_dbc_hz,supply_v2_per_hz,pushing_mhz_per_v`. Use single-sideband phase noise at the reference and free-running oscillator carriers, plus the one-sided PSD of the local DCO supply. The first and last offsets define the integration band and must lie below half the reference frequency. Integrate discrete spurs separately with the edge replay or a single-tone calculation.
 
-The tracking-replica schematic with the filter enabled started at TT, 1.8 V and 25 °C at the nominal tune code. Its first rising edge arrived 475 ns after enable and the shortest period was 3.893 ns. Supply pushing with both options enabled and startup at code zero still need characterization. The supply budget also depends on the routed DCO branch, package impedance, and oscillator noise. Use `--cold-start` for startup from standby and `--step-to COARSE FINE` with individual DAC cells for a code change. Both report the shortest period and high and low pulse widths. `--step-skew-ps` staggers the changing selects within each DAC bank. [Startup data](rev4-filtered-startup.csv)
+With both options enabled at TT, 1.8 V and 25 °C, the first rising edge arrived 475 ns after enable at the nominal tune code and 545 ns at coarse zero, fine 64. A separate unfiltered tracking-replica test stepped from `49:64` to `52:128` with simultaneous selects and measured a 3.747 ns shortest period. Use `--cold-start` for startup from standby and `--step-to COARSE FINE` for a code change. Both report the shortest period and high and low pulse widths. `--aggregate-dac` groups devices on the same select waveform for a schematic probe with mismatch disabled. Use individual cells with `--step-skew-ps` to stagger the selects in each bank. [Startup data](rev4-filtered-startup.csv) · [Code transition data](rev4-dac-transition.csv)
+
+```sh
+python spice/dco_deck.py --lib "$model" --aggregate-dac --tracking-replicas --filtered-bias \
+  --codes 0 --fine-codes 64 --cold-start
+python spice/dco_deck.py --lib "$model" --aggregate-dac --tracking-replicas \
+  --codes 49 --fine-codes 64 --step-to 52 128
+```
+
+The supply budget still depends on the routed DCO branch, package impedance, and oscillator noise. The filter remains a schematic option. Wider corner coverage and extracted tuning, tap, and supply data are needed before selecting it for integration.
 
 ## Capture timing and guard
 

@@ -1,0 +1,2 @@
+corner,vdd,temp_c,code,fine_code,coarse_to,fine_to,step_skew_ps,shortest_period_ns,shortest_high_ns,shortest_low_ns,peak_frequency_mhz
+tt,1.8,25,49,64,52,128,0,3.74683,1.88084,1.86599,266.8923
