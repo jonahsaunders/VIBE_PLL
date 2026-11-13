@@ -182,12 +182,13 @@ class Layout:
         self.landing("nsdm" if pmos else "psdm", x, y, 680)
         self.contact(x, y)
 
-    def capacitor(self, device, x, y):
+    def capacitor(self, device, x, y, bottom_x):
         width, length = (device.dimension(p) for p in ("w", "l"))
         self.rect("capm", x, y, x + width, y + length)
         self.rect("met3", x - 180, y - 180, x + width + 860, y + length + 180)
         top = (x + width // 2, y + length // 2)
-        bottom = (x + width + 590, top[1])
+        bottom = (bottom_x, top[1])
+        self.wire("met3", (x + width + 590, top[1]), bottom, 340)
         self.via(3, *top)
         self.via(2, *bottom)
         return (4, *top), (2, *bottom)
@@ -341,7 +342,8 @@ def stage_row(stage):
 def draw_core(layout, devices, start_y):
     points = {}
     p_top, n_top = HEIGHT - 2_000, 82_750
-    ring_pitch = 19_600
+    ring_left, ring_pitch = 26_600, 7_000
+    delay_left, delay_pitch = 62_300, 10_500
     p_landing, n_landing = p_top - 10_200, n_top - 4_950
     layout.rect("nwell", 3_450, p_top - 8_850, 126_200, HEIGHT - 220)
     layout.rect("psdm", 4_150, p_top - 8_540, 123_000, p_top + 130)
@@ -387,19 +389,25 @@ def draw_core(layout, devices, start_y):
         names = [name for name in bias_names if name in devices and devices[name].model == model]
         for name in names:
             column = place(devices.pop(name), column, top, landing)
-        if column > 26_600:
+        if column > ring_left:
             raise ValueError("The bias transistors overrun the first ring stage")
 
-    for i in range(5):
-        x = 26_600 + i * ring_pitch
+    # Lay out the ring in a folded order so no interstage link spans more
+    # than two stage pitches. Place the fast tap receivers next to the ring.
+    for position, i in enumerate((0, 1, 4, 2, 3)):
+        x = ring_left + position * ring_pitch
         names = stage_row(i)
         for model, top, landing in ((PMOS, p_top, p_landing), (NMOS, n_top, n_landing)):
-            group = [name for name in names if name in devices and devices[name].model == model]
+            group = [name for name in names[:6] if name in devices and devices[name].model == model]
             column = x
             for name in group:
                 column = place(devices.pop(name), column, top, landing)
+            group = [name for name in names[6:] if name in devices and devices[name].model == model]
+            column = delay_left + position * delay_pitch
+            for name in group:
+                column = place(devices.pop(name), column, top, landing)
         cap = devices.pop(f"load{i}")
-        a, b = layout.capacitor(cap, x + 15_900, HEIGHT - 4_200)
+        a, b = layout.capacitor(cap, x + 2_100 - cap.dimension("w") // 2, HEIGHT - 4_200, x + 6_300)
         points.setdefault(cap.nets[0], []).append(a)
         points.setdefault(cap.nets[1], []).append(b)
 

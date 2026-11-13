@@ -38,7 +38,7 @@ jobs:
           for asset in common sky130_fd_pr; do
             curl -fsSL --retry 3 "$release/$asset.tar.zst" | tar --zstd -x -C "$RUNNER_TEMP/sky130"
           done
-      - name: Extract and replay the nominal oscillator
+      - name: Extract the oscillator and check tuning endpoints
         run: |
           mkdir -p build/oscillator
           python3 -m venv "$RUNNER_TEMP/vibe-oscillator"
@@ -53,9 +53,22 @@ jobs:
               "$GITHUB_WORKSPACE/physical/extract_dco.tcl"
           ) 2>&1 | tee build/oscillator/magic-pex.log
           test -s build/oscillator/cpz4_dco_pex.spice
-          "$python" spice/dco_deck.py --lib "$PDK_ROOT/sky130A/libs.tech/ngspice/sky130.lib.spice" \
-            --netlist build/oscillator/cpz4_dco_pex.spice --codes 52 --fine-codes 64 \
-            --output build/oscillator/pex-tt.csv
+          model="$PDK_ROOT/sky130A/libs.tech/ngspice/sky130.lib.spice"
+          pex=build/oscillator/cpz4_dco_pex.spice
+          "$python" spice/dco_deck.py --lib "$model" --netlist "$pex" \
+            --codes 52 --fine-codes 64 --output build/oscillator/pex-tt.csv &
+          nominal=$!
+          "$python" spice/dco_deck.py --lib "$model" --netlist "$pex" \
+            --codes 255 --fine-codes 128 --output build/oscillator/pex-tt-max.csv &
+          typical=$!
+          "$python" spice/dco_deck.py --lib "$model" --netlist "$pex" \
+            --corner ss --vdd 1.62 --temp 0 --codes 255 --fine-codes 128 \
+            --output build/oscillator/pex-ss-max.csv &
+          slow=$!
+          wait "$nominal" "$typical" "$slow"
+          test -s build/oscillator/pex-tt.csv
+          test -s build/oscillator/pex-tt-max.csv
+          test -s build/oscillator/pex-ss-max.csv
       - name: Upload oscillator extraction
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
