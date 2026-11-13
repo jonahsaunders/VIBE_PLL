@@ -19,7 +19,7 @@ def main():
     p.add_argument("--pdk", type=Path, required=True)
     p.add_argument("--klayout", default="klayout")
     p.add_argument("--route-exit-code", type=int, default=0)
-    p.add_argument("--geometry-mode", choices=("flat", "deep"), default="flat")
+    p.add_argument("--geometry-mode", choices=("flat", "deep"), default="deep")
     a = p.parse_args()
     build = a.build.resolve(strict=True)
     decks = a.pdk.resolve() / "libs.tech/klayout"
@@ -27,7 +27,7 @@ def main():
     reference = build / "cpz4_sky130_lvs.spice"
     summary = {"top": "cpz4_sky130", "route_exit_code": a.route_exit_code,
                "enabled_drc_groups": ["feol", "beol", "offgrid"],
-               "lvs_geometry_mode": a.geometry_mode, "passed": False}
+               "lvs_geometry_mode": a.geometry_mode, "lvs_match": False, "passed": False}
     result = build / "physical-verification.json"
     report = build / "pll-drc.lyrdb"
     for stale in (result, report, build / "pll-lvs.lvsdb", build / "pll-lvs.log",
@@ -44,10 +44,9 @@ def main():
         summary["drc_markers"] = len(ET.parse(report).findall("./items/item"))
         deck = build / "sky130-portable.lvs"
         normalize_lvs(decks / "lvs/sky130.lvs", deck)
-        # Extract the full physical geometry flat so substrate junctions
-        # and shared standard-cell wells are evaluated in their real
-        # top-level surroundings. This also avoids hierarchy-dependent
-        # diode omissions in older KLayout releases. No device is waived.
+        # Extract all device geometry, then compare flattened connectivity
+        # graphs so supply/tie-cell pin equivalences are checked across
+        # cell boundaries. No physical cell is treated as a black box.
         text = deck.read_text()
         section = "#=== FLATTEN CELLS ===\nalign"
         if section not in text:
@@ -58,22 +57,8 @@ def main():
         for graph in ("netlist", "schematic"):
             text = text.replace(graph + ".simplify", graph + ".purge\n" +
                                 graph + ".combine_devices\n" + graph + ".purge_nets")
-        # Include physical-junction diagnostics without changing extraction.
-        junction = 'logger.info("Starting DIODE EXTRACTION")'
-        if junction not in text:
-            raise ValueError("Expected the Sky130 diode extraction section")
-        text = text.replace(junction, junction + """
-logger.info("JUNCTION GEOMETRY ncomp=#{ncomp.area} marker=#{areaid_de.area} ndiode=#{ndiode_5v0_terminal_n.area} sub=#{sub.area} overlap=#{(ndiode_5v0_terminal_n & sub).area}")
-""", 1)
-        before_flatten = "netlist.make_top_level_pins"
-        counts = """
-junction_counts = Hash.new(0)
-netlist.each_circuit { |c| c.each_device { |d| junction_counts[d.device_class.name] += 1 } }
-logger.info("JUNCTION RAW DEVICES #{junction_counts.inspect}")
-"""
-        text = text.replace(before_flatten, counts + before_flatten, 1)
-        text = text.replace("netlist.flatten", "netlist.flatten" + counts.replace("RAW", "FLATTENED"), 1)
         deck.write_text(text)
+        summary["normalized_lvs_deck_sha256"] = sha(deck)
         run(a.klayout, build, "pll-lvs", deck,
             {"input": layout, "schematic": reference, "report": build / "pll-lvs.lvsdb",
              "target_netlist": build / "pll-extracted.spice", "lvs_sub": "vss",

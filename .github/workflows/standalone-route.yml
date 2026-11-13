@@ -38,7 +38,8 @@ jobs:
       - name: Build headless Magic and install the Sky130A models
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq tcl-dev ngspice zstd klayout
+          sudo apt-get install -y -qq tcl-dev ngspice zstd
+          sudo bash physical/install_klayout.sh
           mkdir -p "$RUNNER_TEMP/magic-src" "$RUNNER_TEMP/sky130"
           curl -fsSL --retry 3 \
             https://codeload.github.com/RTimothyEdwards/magic/tar.gz/8d37ad4cb49a839eb3e32016f1c06e9bca20d8ef \
@@ -118,7 +119,9 @@ jobs:
             --env SKY130A=/project/build/pdk/sky130A \
             --entrypoint /bin/bash \
             openroad/orfs@sha256:73275384ed91270ea0e5f47710b3c2ff1b91708440c0744208ff226b751f88a0 \
-            -lc 'apt-get update -qq && apt-get install -y -qq klayout;
+            -lc 'set -euo pipefail;
+                 apt-get update -qq;
+                 bash physical/install_klayout.sh;
                  export PATH="/OpenROAD-flow-scripts/tools/install/OpenROAD/bin:/OpenROAD-flow-scripts/tools/install/yosys/bin:$PATH";
                  if ! command -v openroad; then
                    binary=$(find /OpenROAD-flow-scripts /opt /usr/local -type f -name openroad -print -quit);
@@ -127,7 +130,8 @@ jobs:
                  fi;
                  python3 -m venv /tmp/vibe-layout &&
                  /tmp/vibe-layout/bin/pip install klayout==0.30.13 &&
-                 PYTHON=/tmp/vibe-layout/bin/python bash physical/run_standalone.sh build/standalone'
+                 PYTHON=/tmp/vibe-layout/bin/python bash physical/run_standalone.sh build/standalone &&
+                 /tmp/vibe-layout/bin/python tests/check_diode_guard.py --build build/standalone --pdk "$SKY130A"'
       - name: Summarize verification diagnostics
         if: always()
         run: |

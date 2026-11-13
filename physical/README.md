@@ -17,7 +17,9 @@ establish a full-PLL pass. See [verification evidence](../results/rev4-layout.md
 
 ## Reproduce the oscillator checks
 
-Use KLayout and its Python package, plus the Sky130A open_pdks verification decks.
+Use KLayout 0.30.13 and its Python package, plus the Sky130A open_pdks
+verification decks. Ubuntu CI installs the pinned upstream executable with
+`physical/install_klayout.sh`; the build log records its package digest.
 
 ```sh
 python3 physical/layout_dco.py --schematic spice/cpz4_dco_tracking.spice --output build/tracking
@@ -59,7 +61,13 @@ The flow synthesizes the matching controller, builds power and clock routing,
 runs full detailed-route optimization, streams the real standard-cell and DCO
 GDS, and exports intended connectivity from the routed database. The LVS
 reference includes real standard-cell transistor definitions and the DCO
-reference; missing cells or unsupported devices cause a failure.
+reference; missing cells or unsupported devices cause a failure. Full-chip LVS
+extracts the device geometry and compares flattened connectivity graphs.
+The wrapper recognizes N+ antenna diodes using substrate geometry outside
+physical wells and emits their anodes onto the deck's shared substrate
+terminal layer. Junction area, perimeter, and both terminals remain checked,
+without requiring a closed local tap ring. A negative regression removes diode diffusion and
+requires full-chip LVS to reject the damaged layout.
 
 Only a successful route, connected power grids, zero antenna violations,
 zero enabled geometry DRC markers, and matching full-device LVS can produce

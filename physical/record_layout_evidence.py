@@ -57,6 +57,15 @@ def main():
                          (route / "physical-verification.json", "rev4-pll-verification.json"),
                          (osc / "dco-verification.json", "rev4-dco-ci-verification.json")):
         shutil.copyfile(source, results / dest)
+    diode_guard = json.loads((route / "diode-guard.json").read_text())
+    require(diode_guard.get("passed") is True
+            and diode_guard["base_layout_sha256"] == full["layout_sha256"]
+            and diode_guard["layout_diodes_after_parallel_combination"] > 0
+            and diode_guard["layout_diodes_after_parallel_combination"]
+                == diode_guard["reference_diodes_after_parallel_combination"]
+            and diode_guard["negative_verification"]["passed"] is False,
+            "Missing physical antenna-diode negative regression")
+    shutil.copyfile(route / "diode-guard.json", results / "rev4-diode-guard.json")
     measurements = []
     for name, condition in (("tt", "TT, 1.8 V, 25 C"), ("tt-max", "TT, 1.8 V, 25 C"),
                             ("ss-max", "SS, 1.62 V, 0 C")):
@@ -145,7 +154,14 @@ Both source-branch histories are retained in main.
 The [captured RTL regression](rev4-rtl-regression.txt) records 21 passing PLL
 scenarios. The [negative-check log](rev4-checker-guards.txt) shows that wrong
 connectivity, undersized metal, and missing inputs are rejected; stale success
-records and clean-layout output are invalidated.
+records and clean-layout output are invalidated. The
+[antenna-diode regression](rev4-diode-guard.json) separately confirms that real
+junction devices match and removing their physical diffusion fails full-chip LVS.
+
+The extraction wrapper derives the N+ diode body outside physical wells and
+emits its anode onto the PDK's shared substrate terminal layer. This supports
+standard-cell antenna diodes without a local closed tap ring; junction
+dimensions and connectivity remain part of the comparison.
 
 ## Remaining physical qualification
 

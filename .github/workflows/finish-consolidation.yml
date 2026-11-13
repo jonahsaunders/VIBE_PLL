@@ -11,18 +11,32 @@ jobs:
   record-and-consolidate:
     if: startsWith(github.event.head_commit.message, 'Consolidate verified Rev. 4 into main')
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 120
     permissions:
       contents: write
       actions: read
     env:
-      VERIFIED_RUN_ID: "43485032506"
-      VERIFIED_SHA: "cb940632739bd0a56ef832853d19755b18a929aa"
+      VERIFIED_SHA: ${{ github.sha }}
       GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           fetch-depth: 0
+      - name: Wait for this commit's full physical build
+        shell: bash
+        timeout-minutes: 95
+        run: |
+          set -euo pipefail
+          run_id=
+          for attempt in {1..24}; do
+            run_id=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/standalone-route.yml/runs?head_sha=$VERIFIED_SHA&event=push" \
+              --jq '.workflow_runs | sort_by(.id) | last | .id // empty' || true)
+            if test -n "$run_id"; then break; fi
+            sleep 5
+          done
+          test -n "$run_id"
+          gh run watch "$run_id" --repo "$GITHUB_REPOSITORY" --interval 30 --exit-status
+          echo "VERIFIED_RUN_ID=$run_id" >> "$GITHUB_ENV"
       - name: Validate and download the successful source build
         shell: bash
         run: |
@@ -53,7 +67,8 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get update -qq
-          sudo apt-get install -y -qq klayout xvfb zstd python3-venv
+          sudo apt-get install -y -qq xvfb zstd python3-venv
+          sudo bash physical/install_klayout.sh
           mkdir -p build/evidence/pdk
           release=https://github.com/chipfoundry/volare/releases/download/sky130-fa87f8f4bbcc7255b6f0c0fb506960f531ae2392
           curl -fsSL --retry 3 "$release/common.tar.zst" | tar --zstd -x -C build/evidence/pdk
@@ -92,6 +107,7 @@ jobs:
             results/rev4-layout.md results/rev4-pll-ci-verification.json \
             results/rev4-pll-verification.json results/rev4-dco-ci-verification.json \
             results/rev4-build-provenance.json results/rev4-checker-guards.txt \
+            results/rev4-diode-guard.json \
             results/rev4-rtl-regression.txt results/rev4-pex-tt.csv \
             results/rev4-pex-tt-max.csv results/rev4-pex-ss-max.csv
           if ! git diff --cached --quiet; then
