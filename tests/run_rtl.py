@@ -201,9 +201,11 @@ def main():
                             f"-Ptb_pll.TRACKING_REPLICAS={replicas}",
                             "-o", output, *RTL, ROOT / "tests" / "tb_pll.sv"], check=True)
         if not args.spice_data and not args.spectrum and not args.corner_grid and compiled is None:
-            for top in ("tb_edge_counter", "tb_phase_sampler"):
+            for top, module in (("tb_edge_counter", "phase_sampler.sv"),
+                                ("tb_phase_sampler", "phase_sampler.sv"),
+                                ("tb_startup_retry", "loop_control.sv")):
                 unit_test = build / f"{top}.vvp"
-                subprocess.run([*common, "-s", top, "-o", unit_test, RTL[0],
+                subprocess.run([*common, "-s", top, "-o", unit_test, ROOT / "rtl" / module,
                                 ROOT / "tests" / f"{top}.sv"], check=True)
                 subprocess.run([args.vvp, unit_test], check=True)
             if args.fixed_centers:

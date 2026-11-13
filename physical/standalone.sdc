@@ -69,7 +69,7 @@ set_false_path -hold -from [get_clocks dco_clk] -to [dict values $cpz4_gray_capt
 set phase_nets [get_nets -quiet -regexp {^controller\.sampler\.(tap_meta|fine_meta)\[[0-9]+\]$}]
 set cpz4_phase_capture [cpz4_capture_flop_inputs $phase_nets 20]
 set_max_delay -ignore_clock_latency 1.0 -from $phase_sources -to [dict values $cpz4_phase_capture]
-set_false_path -hold -from $phase_sources -to [dict values $cpz4_phase_capture]
+set_false_path -hold -through $phase_sources -to [dict values $cpz4_phase_capture]
 
 # Apply the same endpoint discipline to the one-bit crossings.
 foreach {pattern count source budget} {
