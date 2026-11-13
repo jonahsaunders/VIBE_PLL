@@ -41,7 +41,7 @@ jobs:
           path = Path("build/inspect/sky130-portable.lvs")
           print("ACTUAL PINNED DECK DIODE RULES")
           for number, line in enumerate(path.read_text().splitlines(), 1):
-              if any(key in line for key in ("ndiode", "areaid_de", "areaid_ed", "ncomp ", "sub  ", "extract_devices(diode", "Starting DIODE", "JUNCTION")):
+              if (920 <= number <= 1000) or (1600 <= number <= 1660) or ("sub" in line and ("=" in line or "connect" in line)) or "class Diode" in line:
                   print(number, line)
           PY
           python3 -m venv "$RUNNER_TEMP/lvs-inspect"
