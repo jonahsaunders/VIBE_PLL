@@ -83,6 +83,7 @@ if {$detailed || $global_only} {
         source [file join $here power.tcl]
         tapcell -distance 14 -halo_width_x $halo -halo_width_y $halo \
             -tapcell_master sky130_fd_sc_hd__tapvpwrvgnd_1
+        connect_dco_supply $block $dco $dbu
     }
     place_pins -hor_layers met3 -ver_layers met2
     global_placement -density 0.65
@@ -93,7 +94,6 @@ if {$detailed || $global_only} {
         if {[info exists ::env(SKY130_SET_RC)]} { source $::env(SKY130_SET_RC) }
         global_connect
         pdngen
-        connect_dco_supply $block $dco $dbu
         write_def [file join $out power.def]
         clock_tree_synthesis -root_buf sky130_fd_sc_hd__clkbuf_4 \
             -buf_list {sky130_fd_sc_hd__clkbuf_2 sky130_fd_sc_hd__clkbuf_4}
