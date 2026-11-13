@@ -73,8 +73,6 @@ if {$detailed || $global_only} {
         source [file join $here power.tcl]
         tapcell -distance 14 -halo_width_x $halo -halo_width_y $halo \
             -tapcell_master sky130_fd_sc_hd__tapvpwrvgnd_1
-        repair_tie_fanout -separation 5 sky130_fd_sc_hd__conb_1/HI
-        repair_tie_fanout -separation 5 sky130_fd_sc_hd__conb_1/LO
     }
     place_pins -hor_layers met3 -ver_layers met2
     global_placement -density 0.65
@@ -83,13 +81,19 @@ if {$detailed || $global_only} {
     set_routing_layers -signal met1-met5 -clock met2-met5
     if {$detailed} {
         if {[info exists ::env(SKY130_SET_RC)]} { source $::env(SKY130_SET_RC) }
-        pdngen
+        global_connect
+        pdngen -skip_trim
+        write_def [file join $out power.def]
         clock_tree_synthesis -root_buf sky130_fd_sc_hd__clkbuf_4 \
             -buf_list {sky130_fd_sc_hd__clkbuf_2 sky130_fd_sc_hd__clkbuf_4}
         set_propagated_clock [all_clocks]
         detailed_placement
     }
-    global_route -guide_file [file join $out pll.guide]
+    write_def [file join $out before-route.def]
+    set route_args [list -guide_file [file join $out pll.guide] \
+        -congestion_report_file [file join $out congestion.rpt] -verbose]
+    if {$detailed} { lappend route_args -allow_congestion }
+    global_route {*}$route_args
     write_def [file join $out placed.def]
     report_checks -path_delay min_max -group_path_count 5
     if {$detailed} {

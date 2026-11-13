@@ -10,9 +10,9 @@ set_voltage_domain -name CORE -power VDD_CORE -ground VSS -secondary_power VDD_D
 define_pdn_grid -name core -voltage_domains CORE -pins {met5}
 add_pdn_stripe -grid core -layer met1 -width 0.48 -pitch 5.44 -offset 0 \
     -followpins -nets {VDD_CORE VSS}
-add_pdn_stripe -grid core -layer met4 -width 1.6 -pitch 27.14 -offset 13.57 \
+add_pdn_stripe -grid core -layer met4 -width 1.6 -pitch 40 -offset 13.57 \
     -nets {VDD_CORE VSS}
-add_pdn_stripe -grid core -layer met5 -width 1.6 -pitch 27.20 -offset 13.60 \
+add_pdn_stripe -grid core -layer met5 -width 1.6 -pitch 40 -offset 13.60 \
     -nets {VDD_CORE VSS}
 add_pdn_connect -grid core -layers {met1 met4}
 add_pdn_connect -grid core -layers {met4 met5}

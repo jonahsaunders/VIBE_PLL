@@ -8,6 +8,7 @@ drc check
 drc catchup
 set report [open dco-magic-drc.txt w]
 puts $report [drc listall count]
+puts $report [drc listall why]
 close $report
 puts "DCO Magic DRC markers: [drc listall count total]"
 extract all
