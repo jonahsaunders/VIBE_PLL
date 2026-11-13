@@ -7,6 +7,10 @@ on:
         description: Standalone route workflow run ID
         default: '43485032506'
         required: true
+      recheck:
+        description: Re-extract and compare the saved full-chip layout
+        type: boolean
+        default: false
   push:
     branches: [physical-bringup]
     paths: ['physical/diagnose_lvs.py', '.github/workflows/lvs-diagnostics.yml']
@@ -34,6 +38,7 @@ jobs:
           "$RUNNER_TEMP/lvs-inspect/bin/pip" install klayout==0.30.13
           "$RUNNER_TEMP/lvs-inspect/bin/python" physical/diagnose_lvs.py build/inspect/pll-lvs.lvsdb
       - name: Recheck saved full-chip geometry and diode extraction
+        if: github.event_name == 'workflow_dispatch' && inputs.recheck
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq klayout zstd
