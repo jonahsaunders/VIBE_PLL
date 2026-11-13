@@ -93,6 +93,7 @@ if {$detailed || $global_only} {
         if {[info exists ::env(SKY130_SET_RC)]} { source $::env(SKY130_SET_RC) }
         global_connect
         pdngen
+        connect_dco_supply $block $dco $dbu
         write_def [file join $out power.def]
         clock_tree_synthesis -root_buf sky130_fd_sc_hd__clkbuf_4 \
             -buf_list {sky130_fd_sc_hd__clkbuf_2 sky130_fd_sc_hd__clkbuf_4}
@@ -107,7 +108,8 @@ if {$detailed || $global_only} {
     write_def [file join $out placed.def]
     report_checks -path_delay min_max -group_path_count 5
     if {$detailed} {
-        if {[file size [file join $out congestion.rpt]] == 0} {
+        if {![file exists [file join $out congestion.rpt]] ||
+            [file size [file join $out congestion.rpt]] == 0} {
             repair_antennas sky130_fd_sc_hd__diode_2
         }
         detailed_placement
