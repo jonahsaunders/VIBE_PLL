@@ -23,7 +23,13 @@ jobs:
             --volume "$GITHUB_WORKSPACE:/project" --workdir /project \
             --entrypoint /bin/bash \
             openroad/orfs@sha256:73275384ed91270ea0e5f47710b3c2ff1b91708440c0744208ff226b751f88a0 \
-            -lc 'python3 -m venv /tmp/vibe-layout &&
+            -lc 'export PATH="/OpenROAD-flow-scripts/tools/install/OpenROAD/bin:/OpenROAD-flow-scripts/tools/install/yosys/bin:$PATH";
+                 if ! command -v openroad; then
+                   binary=$(find /OpenROAD-flow-scripts /opt /usr/local -type f -name openroad -print -quit);
+                   test -x "$binary" || exit 127;
+                   export OPENROAD="$binary";
+                 fi;
+                 python3 -m venv /tmp/vibe-layout &&
                  /tmp/vibe-layout/bin/pip install klayout==0.30.13 &&
                  PYTHON=/tmp/vibe-layout/bin/python bash physical/run_standalone.sh build/standalone'
       - name: Upload route outputs and diagnostics

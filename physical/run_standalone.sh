@@ -9,6 +9,7 @@ build=$(cd "$destination" && pwd)
 platform=${ORFS_SKY130HD:-/OpenROAD-flow-scripts/flow/platforms/sky130hd}
 python=${PYTHON:-python3}
 klayout=${KLAYOUT:-klayout}
+openroad=${OPENROAD:-openroad}
 
 export TECH_LEF="$platform/lef/sky130_fd_sc_hd.tlef"
 export CELLS_LEF="$platform/lef/sky130_fd_sc_hd_merged.lef"
@@ -26,7 +27,7 @@ fi
 "$python" "$root/tests/check_slot.py" --liberty "$LIBERTY" --lef "$CELLS_LEF" \
     --slot 400 250 --dco-reserve 140 115 --edge-reserve 5 --utilization 0.65 \
     --mapped-netlist "$MAPPED_VERILOG" | tee "$build/area.log"
-openroad -exit "$root/physical/floorplan.tcl" | tee "$build/openroad.log"
+"$openroad" -exit "$root/physical/floorplan.tcl" 2>&1 | tee "$build/openroad.log"
 test -s "$build/routed.def"
 test -s "$build/routed.odb"
 if [[ -s "$build/route-drc.rpt" ]]; then
