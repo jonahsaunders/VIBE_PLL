@@ -21,16 +21,21 @@ def main():
     p.add_argument("--route-exit-code", type=int, default=0)
     a = p.parse_args()
     build = a.build.resolve(strict=True)
-    decks = a.pdk.resolve(strict=True) / "libs.tech/klayout"
+    decks = a.pdk.resolve() / "libs.tech/klayout"
     layout = build / "cpz4_sky130-review.gds"
     reference = build / "cpz4_sky130_lvs.spice"
-    summary = {"top": "cpz4_sky130", "layout_sha256": sha(layout),
-               "reference_sha256": sha(reference), "route_exit_code": a.route_exit_code, "passed": False}
+    summary = {"top": "cpz4_sky130", "route_exit_code": a.route_exit_code,
+               "enabled_drc_groups": ["feol", "beol", "offgrid"], "passed": False}
     result = build / "physical-verification.json"
     report = build / "pll-drc.lyrdb"
-    for stale in (result, report, build / "pll-lvs.lvsdb", build / "cpz4_sky130.gds"):
+    for stale in (result, report, build / "pll-lvs.lvsdb", build / "pll-lvs.log",
+                  build / "cpz4_sky130.gds"):
         stale.unlink(missing_ok=True)
     try:
+        for label, path in (("layout", layout), ("reference", reference),
+                            ("drc_deck", decks / "drc/sky130A_mr.drc"),
+                            ("lvs_deck", decks / "lvs/sky130.lvs")):
+            summary[label + "_sha256"] = sha(path)
         run(a.klayout, build, "pll-drc", decks / "drc/sky130A_mr.drc",
             {"input": layout, "report": report, "top_cell": "cpz4_sky130",
              "feol": 1, "beol": 1, "offgrid": 1})

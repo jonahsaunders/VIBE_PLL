@@ -24,7 +24,7 @@ def main():
     source = a.build.resolve(strict=True)
     checker = ROOT / "physical/check_dco.py"
     with tempfile.TemporaryDirectory(prefix="negative-checks-", dir=source) as temp:
-        for kind in ("lvs", "drc"):
+        for kind in ("lvs", "drc", "missing-layout"):
             target = Path(temp) / kind
             target.mkdir()
             for name in ("cpz4_dco.gds", "cpz4_dco_lvs.spice"):
@@ -38,7 +38,7 @@ def main():
                 words[2] = "deliberately_disconnected_gate"
                 lines[index] = " ".join(words)
                 reference.write_text("\n".join(lines) + "\n")
-            else:
+            elif kind == "drc":
                 layout = db.Layout()
                 layout.read(str(target / "cpz4_dco.gds"))
                 top = layout.top_cell()
@@ -46,6 +46,8 @@ def main():
                 width = round(0.05 / layout.dbu)
                 top.shapes(layout.layer(68, 20)).insert(db.Box(x, 0, x + width, width))
                 layout.write(str(target / "cpz4_dco.gds"))
+            else:
+                (target / "cpz4_dco.gds").unlink()
             # A prior passing report must never survive a failed check.
             (target / "dco-verification.json").write_text('{"passed": true}')
             env = {key: value for key, value in os.environ.items()
@@ -60,6 +62,19 @@ def main():
             if kind == "drc" and report.get("drc_markers", 0) == 0:
                 raise AssertionError("Geometry defect did not create a DRC marker")
             print(f"PASS: {kind.upper()} defect rejected; stale success cleared")
+
+        target = Path(temp) / "full-chip-missing-layout"
+        target.mkdir()
+        (target / "physical-verification.json").write_text('{"passed": true}')
+        clean = target / "cpz4_sky130.gds"
+        clean.write_bytes(b"stale previous result")
+        proc = subprocess.run([a.python, str(ROOT / "physical/check_layout.py"),
+                               "--build", str(target), "--pdk", str(a.pdk.resolve())],
+                              capture_output=True, text=True, env=env)
+        report = json.loads((target / "physical-verification.json").read_text())
+        if proc.returncode == 0 or report["passed"] or clean.exists():
+            raise AssertionError("Missing full-chip input left a successful result")
+        print("PASS: missing full-chip input rejected; stale clean GDS cleared")
 
 
 if __name__ == "__main__":

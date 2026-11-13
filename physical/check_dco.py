@@ -56,7 +56,7 @@ def main():
     parser.add_argument("--build", type=Path, required=True)
     args = parser.parse_args()
     build = args.build.resolve(strict=True)
-    pdk = args.pdk.resolve(strict=True) / "libs.tech" / "klayout"
+    pdk = args.pdk.resolve() / "libs.tech" / "klayout"
     layout = build / "cpz4_dco.gds"
     drc_report = build / "dco-drc.lyrdb"
     reference = build / "cpz4_dco_lvs.spice"
@@ -64,11 +64,11 @@ def main():
     for stale in (drc_report, build / "dco-lvs.lvsdb", build / "dco-lvs.log", result_path):
         stale.unlink(missing_ok=True)
     result = {"top": "cpz4_dco", "passed": False, "enabled_drc_groups": ["feol", "beol", "offgrid"]}
-    for label, path in (("layout", layout), ("reference", reference),
-                        ("drc_deck", pdk / "drc/sky130A_mr.drc"),
-                        ("lvs_deck", pdk / "lvs/sky130.lvs")):
-        result[label + "_sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
     try:
+        for label, path in (("layout", layout), ("reference", reference),
+                            ("drc_deck", pdk / "drc/sky130A_mr.drc"),
+                            ("lvs_deck", pdk / "lvs/sky130.lvs")):
+            result[label + "_sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
         run(args.klayout, build, "dco-drc", pdk / "drc" / "sky130A_mr.drc",
             {"input": layout, "report": drc_report, "top_cell": "cpz4_dco",
              "feol": 1, "beol": 1, "offgrid": 1})

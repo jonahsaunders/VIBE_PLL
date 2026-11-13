@@ -1,0 +1,135 @@
+name: Finish verified Rev. 4 consolidation
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  record-and-consolidate:
+    if: startsWith(github.event.head_commit.message, 'Consolidate verified Rev. 4 into main')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: write
+      actions: read
+    env:
+      VERIFIED_RUN_ID: "43485032506"
+      VERIFIED_SHA: "cb940632739bd0a56ef832853d19755b18a929aa"
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+      - name: Validate and download the successful source build
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$VERIFIED_RUN_ID" > "$RUNNER_TEMP/verified-run.json"
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          run = json.loads((Path(os.environ["RUNNER_TEMP"]) / "verified-run.json").read_text())
+          if (run["conclusion"] != "success" or run["head_sha"] != os.environ["VERIFIED_SHA"]
+                  or run["repository"]["full_name"] != os.environ["GITHUB_REPOSITORY"]):
+              raise SystemExit("The designated source build did not pass")
+          PY
+          git diff --exit-code "$VERIFIED_SHA" -- \
+            rtl spice physical/layout_dco.py physical/floorplan.tcl \
+            physical/run_standalone.sh physical/export_lvs.py physical/stream_layout.py \
+            physical/power.tcl physical/standalone.sdc physical/capture_paths.tcl tests/check_slot.py
+          gh run download "$VERIFIED_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+            --name sky130-standalone --dir build/evidence/route
+          gh run download "$VERIFIED_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+            --name sky130-oscillator --dir build/evidence/oscillator
+          cp build/evidence/route/physical-verification.json build/evidence/ci-verification.json
+          rtl_job=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$VERIFIED_RUN_ID/jobs" \
+            --jq '.jobs[] | select(.name == "rtl" and .conclusion == "success") | .id')
+          test -n "$rtl_job"
+          gh api "repos/$GITHUB_REPOSITORY/actions/jobs/$rtl_job/logs" > build/evidence/rtl.log
+      - name: Install pinned verification inputs
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq klayout xvfb zstd python3-venv
+          mkdir -p build/evidence/pdk
+          release=https://github.com/chipfoundry/volare/releases/download/sky130-fa87f8f4bbcc7255b6f0c0fb506960f531ae2392
+          curl -fsSL --retry 3 "$release/common.tar.zst" | tar --zstd -x -C build/evidence/pdk
+          python3 -m venv "$RUNNER_TEMP/vibe-evidence"
+          "$RUNNER_TEMP/vibe-evidence/bin/pip" install klayout==0.30.13
+      - name: Recheck geometry, connectivity, and failure guards
+        run: |
+          set -euo pipefail
+          python="$RUNNER_TEMP/vibe-evidence/bin/python"
+          "$python" -m py_compile physical/check_dco.py physical/check_layout.py \
+            physical/record_layout_evidence.py tests/check_physical_guards.py
+          "$python" physical/check_dco.py --build build/evidence/oscillator --pdk build/evidence/pdk/sky130A
+          "$python" tests/check_physical_guards.py --build build/evidence/oscillator \
+            --pdk build/evidence/pdk/sky130A | tee results/rev4-checker-guards.txt
+          "$python" physical/check_layout.py --build build/evidence/route \
+            --pdk build/evidence/pdk/sky130A --route-exit-code 0
+      - name: Render and record the verified GDS
+        run: |
+          set -euo pipefail
+          xvfb-run -a klayout -b -r physical/render_layout.py \
+            -rd input="$GITHUB_WORKSPACE/build/evidence/route/cpz4_sky130.gds" \
+            -rd output="$GITHUB_WORKSPACE/docs/rev4-pll-layout.png"
+          xvfb-run -a klayout -b -r physical/render_layout.py \
+            -rd input="$GITHUB_WORKSPACE/build/evidence/oscillator/cpz4_dco.gds" \
+            -rd output="$GITHUB_WORKSPACE/docs/rev4-dco-layout.png"
+          "$RUNNER_TEMP/vibe-evidence/bin/python" physical/record_layout_evidence.py \
+            --source-commit "$VERIFIED_SHA" --run-id "$VERIFIED_RUN_ID"
+      - name: Save artifacts and remove only integrated branches
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin main
+          test "$(git rev-parse FETCH_HEAD)" = "$GITHUB_SHA"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add README.md docs/rev4-pll-layout.png docs/rev4-dco-layout.png layout \
+            results/rev4-layout.md results/rev4-pll-ci-verification.json \
+            results/rev4-pll-verification.json results/rev4-dco-ci-verification.json \
+            results/rev4-build-provenance.json results/rev4-checker-guards.txt \
+            results/rev4-rtl-regression.txt results/rev4-pex-tt.csv \
+            results/rev4-pex-tt-max.csv results/rev4-pex-ss-max.csv
+          if ! git diff --cached --quiet; then
+            git commit -m "Record verified Rev. 4 layout artifacts"
+            git push origin HEAD:main
+          fi
+          test "$(git ls-remote --heads origin refs/heads/main | cut -f1)" = "$(git rev-parse HEAD)"
+          leases=()
+          deletions=()
+          for branch in physical-bringup codex/rev4-phase-detector; do
+            sha=$(git ls-remote --heads origin "refs/heads/$branch" | cut -f1)
+            if [[ -z "$sha" ]]; then
+              continue
+            fi
+            git fetch --no-tags origin "refs/heads/$branch"
+            test "$(git rev-parse FETCH_HEAD)" = "$sha"
+            git merge-base --is-ancestor "$sha" HEAD || {
+              echo "Refusing to delete unmerged work on $branch" >&2
+              exit 1
+            }
+            leases+=("--force-with-lease=refs/heads/$branch:$sha")
+            deletions+=(":refs/heads/$branch")
+          done
+          if (( ${#deletions[@]} )); then
+            git push --atomic "${leases[@]}" origin "${deletions[@]}"
+          fi
+          git rev-parse HEAD
+      - name: Preserve verification evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: verified-layout-evidence
+          path: |
+            build/evidence/route/physical-verification.json
+            build/evidence/route/pll-*.log
+            docs/rev4-pll-layout.png
+            results/rev4-*.json
+            results/rev4-*.csv
+            results/rev4-checker-guards.txt
+            layout
+          if-no-files-found: warn

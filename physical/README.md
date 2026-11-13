@@ -71,7 +71,7 @@ and does not truncate routing to one iteration.
 | --- | --- | --- |
 | `TRACKING_REPLICAS` | `1` | Select the matching circuit and phase-center tables; `0` retains legacy support |
 | `ON_CHIP_CAL` | `0` | Set to `1` to retain histogram calibration in the mapped controller |
-| `MAX_COARSE_CODE` | `255` | Characterized hard coarse-code ceiling |
+| `MAX_COARSE_CODE` | `255` | Hard coarse-code ceiling; lower to the validated operating limit |
 | `PLACE_DENSITY` | `0.50` | Placement density |
 | `DIE_AREA`, `CORE_AREA` | Above | Override together for the allocated outline |
 | `DCO_RESERVE`, `DCO_HALO_UM` | Above | Must contain the actual macro and its halo |
