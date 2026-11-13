@@ -30,8 +30,8 @@ set dco [$block findInst oscillator]
 if {$dco eq "NULL"} { error "The mapped netlist must instantiate oscillator" }
 set master [$dco getMaster]
 set dbu [$block getDbUnitsPerMicron]
-set halo 5
-set max_dco {140 115}
+set halo 4
+set max_dco {138 113}
 if {[info exists ::env(DCO_HALO_UM)]} { set halo $::env(DCO_HALO_UM) }
 if {[info exists ::env(DCO_RESERVE)]} { set max_dco $::env(DCO_RESERVE) }
 set width [expr {double([$master getWidth]) / $dbu}]

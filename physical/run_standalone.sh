@@ -25,7 +25,7 @@ if [[ -n "${SKY130A:-}" ]]; then
     "$python" "$root/physical/check_dco.py" --klayout "$klayout" --pdk "$SKY130A" --build "$build"
 fi
 "$python" "$root/tests/check_slot.py" --liberty "$LIBERTY" --lef "$CELLS_LEF" \
-    --slot 400 250 --dco-reserve 140 115 --edge-reserve 5 --utilization 0.65 \
+    --slot 400 250 --dco-reserve 138 113 --edge-reserve 5 --utilization 0.65 \
     --mapped-netlist "$MAPPED_VERILOG" | tee "$build/area.log"
 "$openroad" -exit "$root/physical/floorplan.tcl" 2>&1 | tee "$build/openroad.log"
 test -s "$build/routed.def"

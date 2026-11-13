@@ -34,7 +34,8 @@ module cpz4_loop_control (
     // The guard works in MHz times the 32-cycle measurement window.
     // Reserve 32 MHz for fine motion and budget 16 MHz per coarse step.
     localparam [22:0] CLOCK_LIMIT = 23'd400 << 5;
-    localparam [22:0] COARSE_LIMIT = 23'd368 << 5;
+    localparam [4:0] COARSE_STEP_BUDGET = 5'd23;
+    localparam [22:0] COARSE_LIMIT = {9'b0, COARSE_STEP_BUDGET, 9'b0};
     localparam [22:0] MIN_RUNNING = 23'd48 << 5;
     localparam [22:0] SETPOINT_LIMIT = 23'd350 << 12;
     // Span in Q12 phase counts over a 32-reference-cycle measurement.
@@ -80,8 +81,8 @@ module cpz4_loop_control (
     wire [22:0] speed_upper = speed_operand * ref_upper_mhz;
     // COARSE_LIMIT is an exact multiple of the 512-unit step budget.
     // Subtract the ceiling in steps, which avoids a 23-bit subtractor.
-    wire [14:0] guarded_step_count = {1'b0, speed_upper[22:9]} + {14'b0, |speed_upper[8:0]};
-    wire [4:0] safe_steps = speed_upper < COARSE_LIMIT ? 5'd23 - guarded_step_count[4:0] : 5'd0;
+    wire [4:0] guarded_step_count = speed_upper[13:9] + {4'b0, |speed_upper[8:0]};
+    wire [4:0] safe_steps = speed_upper < COARSE_LIMIT ? COARSE_STEP_BUDGET - guarded_step_count : 5'd0;
     wire [4:0] ramp_step = dco_code < 8'd32 ? 5'd8 : 5'd16;
     wire [4:0] guarded_step = safe_steps < ramp_step ? safe_steps : ramp_step;
     wire [8:0] ramp_sum = {1'b0, dco_code} + {4'b0, guarded_step};
