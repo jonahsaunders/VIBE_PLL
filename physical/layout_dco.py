@@ -434,7 +434,9 @@ def draw_core(layout, devices, start_y):
 
 def route_core(layout, points, ports, n_landing, p_landing):
     # Metal2 approaches from the NMOS row and metal4 from the PMOS row.
-    rows = list(range(n_landing + 700, p_landing - 650, 700))
+    # The absolute met3 tracks are 0.34 + 0.68*N um. The standalone
+    # placement uses a DCO y-origin of 65 um, so these trunks are on-grid.
+    rows = list(range(n_landing + 740, p_landing - 650, 680))
     tracks = [[] for _ in rows]
     locations = {"vdd": VDD_X, "vss": VSS_X}
     channels = {}
@@ -446,6 +448,7 @@ def route_core(layout, points, ports, n_landing, p_landing):
             raise ValueError(f"Insufficient routing tracks for {net} at {left / 1000:g}..{right / 1000:g} um")
         tracks[index].append((left, right))
         channels[net] = rows[index]
+    signal_ports = []
     for net, terminals in points.items():
         y = channels[net]
         lo, hi = min(x for _, x, _ in terminals), max(x for _, x, _ in terminals)
@@ -465,7 +468,25 @@ def route_core(layout, points, ports, n_landing, p_landing):
                 layout.via(2, x, y)
         if net in ports:
             x = locations.get(net, (lo + hi) // 10 * 5)
-            layout.pin(net, "met3", x, y, 340, 340)
+            if net in locations:
+                layout.pin(net, "met3", x, y, 340, 340)
+            else:
+                layout.pin(net, "met3", x, y, 1_200, 340)
+                signal_ports.append((net, lo, hi, x, y))
+
+    # Add a second access layer where the internal met4 drops leave room.
+    met4 = db.Region(layout.cell.shapes(layout.layers["met4"])).merged()
+    for net, lo, hi, x, y in signal_ports:
+        trials = range(lo, hi + 1, 25)
+        for pin_x in sorted(trials, key=lambda candidate: abs(candidate - x)):
+            landing = db.Box(pin_x - 410, y - 200, pin_x + 410, y + 200)
+            if not (met4 & db.Region(landing.enlarged(320))).is_empty():
+                continue
+            layout.via(3, pin_x, y)
+            layout.landing("met4", pin_x, y, 820, 400)
+            layout.port_shape(net, "met4", pin_x, y, 820, 400, label=False)
+            met4.insert(landing)
+            break
 
 
 def write_lvs_reference(path, ports, devices):

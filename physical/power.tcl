@@ -24,12 +24,6 @@ add_pdn_stripe -grid core -layer met5 -width 1.6 -pitch 40 -offset 13.60 \
 add_pdn_connect -grid core -layers {met1 met4}
 add_pdn_connect -grid core -layers {met4 met5}
 
-# Stitch the DCO's ground into the core grid at its dedicated met5 landing.
-set core_bottom [expr {double([[$block getCoreArea] yMin]) / $dbu}]
-set dco_vss_y [expr {double($y) / $dbu + 83.53}]
-add_pdn_stripe -grid core -layer met5 -width 1.6 -pitch 240 \
-    -offset [expr {$dco_vss_y - $core_bottom}] -nets {VSS} -extend_to_boundary
-
 proc connect_dco_supply {block dco dbu} {
     # The separate analog supply has one macro terminal and one boundary
     # terminal. Keep the dedicated route on met5, with no vias to the core.
@@ -47,4 +41,35 @@ proc connect_dco_supply {block dco dbu} {
     set bpin [odb::dbBPin_create [$block findBTerm VDD_DCO]]
     $bpin setPlacementStatus FIRM
     odb::dbBox_create $bpin $layer [expr {$x2 - round(3.4 * $dbu)}] $y1 $x2 $y2
+}
+
+proc connect_dco_ground {block dco} {
+    # The generated grid cannot extend a stripe through the macro outline.
+    # Extend an existing VSS met4 stripe on the left to the DCO's met5 pin.
+    set terminal [$dco findITerm vss]
+    set pin [$terminal getBBox]
+    set net [$terminal getNet]
+    set tech [[$block getDataBase] getTech]
+    set met4 [$tech findLayer met4]
+    set met5 [$tech findLayer met5]
+    set chosen NULL
+    set right_edge 0
+    set center_y [expr {([$pin yMin] + [$pin yMax]) / 2}]
+    foreach wire [$net getSWires] {
+        foreach box [$wire getWires] {
+            if {![$box isVia] && [$box getTechLayer] eq $met4 &&
+                [$box yMin] < [$pin yMin] && [$box yMax] > [$pin yMax] &&
+                [$box xMax] < [$pin xMin] && [$box xMax] > $right_edge} {
+                set right_edge [$box xMax]
+                set chosen $box
+                set stripe $wire
+            }
+        }
+    }
+    if {$chosen eq "NULL"} { error "No nearby VSS met4 stripe reaches the DCO ground pin" }
+    set center_x [expr {([$chosen xMin] + $right_edge) / 2}]
+    set end_x [expr {([$pin xMin] + [$pin xMax]) / 2}]
+    set start_x [expr {$center_x - ([$pin yMax] - [$pin yMin]) / 2}]
+    odb::dbSBox_create $stripe $met5 $start_x [$pin yMin] $end_x [$pin yMax] STRIPE
+    odb::dbSBox_create $stripe [$tech findVia M4M5_PR] $center_x $center_y STRIPE
 }
