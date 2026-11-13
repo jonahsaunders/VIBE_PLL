@@ -255,12 +255,9 @@ class Layout:
         lines += ["  OBS", "    LAYER li1 ;", f"      RECT 0 0 {self.width / 1000:g} {self.height / 1000:g} ;"]
         for metal in ("met1", "met2", "met3", "met4", "met5"):
             metal_region = db.Region(self.cell.shapes(self.layers[metal]))
-            # Protect device routing below the signal access layer. Metal3
-            # must retain its real whitespace: short tap pins need a lateral
-            # escape to an on-grid metal4 via. A blanket metal3 obstruction
-            # leaves these manufactured pins with no legal access point.
-            if metal in ("met1", "met2"):
-                metal_region = db.Region(db.Box(0, 0, self.width, self.height))
+            # Internal signal pins need the real routing channels between
+            # analog wires. Preserve every manufactured metal/cut obstacle
+            # instead of blocking otherwise empty lower-layer space.
             pins = [db.Box(*box) for name, shapes in exposed.items()
                     for layer, box in shapes if layer == metal and
                     (name not in ("vdd", "vss") or metal == "met5")]
@@ -489,8 +486,9 @@ def draw_core(layout, devices, start_y):
 
 def route_core(layout, points, ports, n_landing, p_landing):
     # Metal2 approaches from the NMOS row and metal4 from the PMOS row.
-    # The absolute met3 tracks are 0.34 + 0.68*N um. The standalone
-    # placement uses a DCO y-origin of 65 um, so these trunks are on-grid.
+    # Match the 0.68 um met3 pitch. A different macro origin can offset
+    # these channels from the top-level grid, so the abstract retains
+    # real whitespace for the router's pin-access escapes.
     rows = list(range(n_landing + 740, p_landing - 650, 680))
     tracks = [[] for _ in rows]
     locations = {"vdd": layout.vdd_x, "vss": VSS_X}
@@ -526,7 +524,12 @@ def route_core(layout, points, ports, n_landing, p_landing):
             if net in locations:
                 layout.pin(net, "met3", x, y, 340, 340)
             else:
-                layout.pin(net, "met3", x, y, 1_200, 340)
+                width = 2_000 if layout.tracking and net.startswith(("tap_", "fine_tap_")) else 1_200
+                if width == 2_000:
+                    # A manufactured landing spans more than two met4
+                    # tracks, leaving access beside the existing analog via.
+                    layout.landing("met3", x, y, width, 380)
+                layout.pin(net, "met3", x, y, width, 340)
                 signal_ports.append((net, lo, hi, x, y))
 
     # Add a second access layer where the internal met4 drops leave room.

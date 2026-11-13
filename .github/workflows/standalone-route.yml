@@ -103,6 +103,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Route standalone PLL
+        timeout-minutes: 80
         run: |
           mkdir -p build/standalone build/pdk
           release=https://github.com/chipfoundry/volare/releases/download/sky130-fa87f8f4bbcc7255b6f0c0fb506960f531ae2392
@@ -124,6 +125,31 @@ jobs:
                  python3 -m venv /tmp/vibe-layout &&
                  /tmp/vibe-layout/bin/pip install klayout==0.30.13 &&
                  PYTHON=/tmp/vibe-layout/bin/python bash physical/run_standalone.sh build/standalone'
+      - name: Summarize verification diagnostics
+        if: always()
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          from collections import Counter
+          import xml.etree.ElementTree as ET
+          root = Path("build/standalone")
+          for name in ("physical-verification.json", "route-checks.txt", "route-violations.txt"):
+              path = root / name
+              if path.exists():
+                  print(name + ":")
+                  print(path.read_text())
+          path = root / "pll-drc.lyrdb"
+          if path.exists():
+              report = ET.parse(path)
+              items = report.findall("./items/item")
+              print("DRC categories:", dict(Counter(i.findtext("category") for i in items)))
+              for item in items[:25]:
+                  print("DRC marker:", " ".join(item.itertext())[:500])
+          path = root / "pll-lvs.log"
+          if path.exists():
+              print("LVS log tail:")
+              print("\n".join(path.read_text().splitlines()[-30:]))
+          PY
       - name: Upload route outputs and diagnostics
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
