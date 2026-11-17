@@ -3,6 +3,7 @@
 """Generate and characterize the Sky130A coarse/fine DCO and delay taps."""
 
 import argparse
+from bisect import bisect_right
 import csv
 import math
 import os
@@ -261,7 +262,40 @@ def crossings(rows, threshold):
     return sorted(edges)
 
 
-def characterize(path, volts, start_s=110e-9):
+def decoded_widths(cycle, events, finish, histories):
+    """Measure the RTL thermometer decoder, including time spent on its coarse fallback."""
+    widths = [0.0] * 90
+    period = finish - cycle[0][0]
+    for bin_id, (start, tap, rising) in enumerate(cycle):
+        end = cycle[bin_id + 1][0] if bin_id < 9 else finish
+        base = len(TAP_PINS) + 3 * tap
+        raw = 0
+        for bit in range(3):
+            history = histories[base + bit]
+            index = bisect_right(history, (start, 2)) - 1
+            if index < 0:
+                return None
+            raw |= history[index][1] << bit
+        transitions = [(t, i - base, r) for t, i, r in events if start < t < end and base <= i < base + 3]
+        previous, last_valid, last_slot = start, -1, 0
+        for t, bit, level in [*transitions, (end, 0, 0)]:
+            # These four words and their polarity follow cpz4_phase_sampler.
+            if t > previous:
+                word = (raw ^ 5) ^ (0 if rising else 7)
+                if word in (0, 1, 3, 7):
+                    last_valid = word.bit_count()
+                    slot = 2 * last_valid + 1
+                else:
+                    slot = 2 * (last_valid + 1)
+                if slot < last_slot:
+                    return None  # This waveform cannot be represented by ordered dwell slots.
+                widths[9 * bin_id + slot] += (t - previous) / period
+                previous, last_slot = t, slot
+            raw = (raw | (1 << bit)) if level else (raw & ~(1 << bit))
+    return widths
+
+
+def characterize(path, volts, start_s=110e-9, measure_decoder=False):
     with path.open() as data:
         next(data)
         rows = [tuple(map(float, line.split())) for line in data if line.strip()]
@@ -278,6 +312,11 @@ def characterize(path, volts, start_s=110e-9):
     fine_widths = [[] for _ in range(40)]
     bad_sequences = 0
     bad_fine_sequences = 0
+    decoded = []
+    if measure_decoder:
+        histories = [[] for _ in range(TAP_COUNT)]
+        for time, tap, level in edges:
+            histories[tap].append((time, level))
     for all_events, end in cycles:
         cycle = [event for event in all_events if event[1] < len(TAP_PINS)]
         start = cycle[0][0]
@@ -286,6 +325,10 @@ def characterize(path, volts, start_s=110e-9):
         if tuple(edge[1:] for edge in cycle) != TAP_ORDER:
             bad_sequences += 1
             continue
+        if measure_decoder:
+            slots = decoded_widths(cycle, all_events, end, histories)
+            if slots is not None:
+                decoded.append(slots)
         times = [edge[0] for edge in cycle] + [end]
         duty.append((times[5] - start) / period)
         widths = [(b - a) / period for a, b in zip(times, times[1:])]
@@ -317,7 +360,7 @@ def characterize(path, volts, start_s=110e-9):
     tail = [row for row in rows if tail_start <= row[0] <= tail_end]
     avg_current = sum((b[0] - a[0]) * (a[-1] + b[-1]) / 2
                       for a, b in zip(tail, tail[1:])) / (tail[-1][0] - tail[0][0])
-    return {
+    result = {
         "frequency_mhz": round(1e-6 / mean(periods), 4),
         "period_spread_pct": round(100 * (max(periods) - min(periods)) / mean(periods), 4),
         "duty_pct": round(100 * mean(duty), 3) if duty else "",
@@ -332,6 +375,13 @@ def characterize(path, volts, start_s=110e-9):
         **{f"bin_{i}_ui": round(mean(widths), 8) if widths else "" for i, widths in enumerate(bin_widths)},
         **{f"fine_bin_{i}_ui": round(mean(widths), 8) if widths else "" for i, widths in enumerate(fine_widths)},
     }
+    if measure_decoder:
+        result["unmodeled_decoder_cycles"] = len(cycles) - len(decoded)
+        averages = [mean(group) for group in zip(*decoded)] if len(decoded) == len(cycles) else []
+        result["decoder_slots_ui"] = " ".join(f"{width:.10g}" for width in averages)
+        result["coarse_fallback_ui"] = (round(sum(w for i, w in enumerate(averages) if (i % 9) % 2 == 0), 8)
+                                        if averages else "")
+    return result
 
 
 def tap0_edges(path, volts):
@@ -508,7 +558,7 @@ def run_case(args, code, fine_code):
                     "ripple_mhz": args.supply_ripple_mhz, "added_tap_load_ff": args.added_tap_load_ff,
                     "supply_pushing_mhz_per_v": round(pushing, 3)}
         start_s = 110e-9 if args.settle_ns is None else args.settle_ns * 1e-9
-        result = {**operating_point, **characterize(waveform, args.vdd, start_s)}
+        result = {**operating_point, **characterize(waveform, args.vdd, start_s, args.measure_decoder)}
         if args.cold_start or args.step_to:
             edges = list(tap0_edges(waveform, args.vdd))
             if args.cold_start:
@@ -573,6 +623,8 @@ def main():
                         help="discard startup before a 240 ns static observation window")
     parser.add_argument("--output", type=Path, help="write summary CSV to this path")
     parser.add_argument("--keep-waveform", type=Path, help="write waveform samples in this directory")
+    parser.add_argument("--measure-decoder", action="store_true",
+                        help="measure the actual fine thermometer word and coarse fallback dwell")
     parser.add_argument("--added-tap-load-ff", type=float, default=0,
                         help="additional capacitance on each sampled tap in fF")
     parser.add_argument("--replica-strength", type=float,
@@ -650,7 +702,8 @@ def main():
             for fine_code in fine_codes:
                 result = run_case(args, code, fine_code)
                 results.append(result)
-                summary = {k: v for k, v in result.items() if not k.startswith(("bin_", "fine_bin_"))}
+                summary = {k: v for k, v in result.items()
+                           if not k.startswith(("bin_", "fine_bin_")) and k != "decoder_slots_ui"}
                 print(summary, flush=True)
         if args.output:
             with args.output.open("w", newline="", encoding="ascii") as file:

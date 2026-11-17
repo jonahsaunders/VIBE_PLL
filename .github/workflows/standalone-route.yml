@@ -28,6 +28,7 @@ jobs:
           mkdir -p build/rtl
           sudo apt-get update -qq
           sudo apt-get install -y -qq iverilog
+          python3 tests/test_decoder_widths.py
           python3 tests/check_phase_tables.py --tt results/range-dco/tt-40-64.csv --ss results/range-dco/ss-136-64.csv
           python3 tests/run_rtl.py --fixed-centers --report build/rtl/fixed.json
           python3 tests/run_rtl.py --fixed-centers --corner-grid --report build/rtl/corners.json
@@ -183,17 +184,19 @@ jobs:
           path: build/standalone
           if-no-files-found: warn
 
-  extracted-replay:
+  measure:
     needs: oscillator
     runs-on: ubuntu-24.04
     timeout-minutes: 150
     strategy:
       fail-fast: false
       matrix:
+        corner: [tt, ss, ff]
+        partition: [0, 1, 2]
         include:
           - {corner: tt, ceiling: 64, stride: 16, extra: '37 38 40 52 53'}
           - {corner: ss, ceiling: 192, stride: 32, extra: '136 159 169 170'}
-          - {corner: ff, ceiling: 48, stride: 12, extra: '23 25 31 32'}
+          - {corner: ff, ceiling: 24, stride: 6, extra: '11 13 19 23'}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
@@ -201,7 +204,7 @@ jobs:
       - name: Install the simulator and matching device models
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq iverilog ngspice python3-numpy zstd
+          sudo apt-get install -y -qq ngspice zstd
           release=https://github.com/chipfoundry/volare/releases/download/sky130-fa87f8f4bbcc7255b6f0c0fb506960f531ae2392
           mkdir -p build/pdk
           for asset in common sky130_fd_pr; do
@@ -216,9 +219,36 @@ jobs:
           OMP_NUM_THREADS: '1'
         run: |
           python3 tests/qualify_pex.py sweep --corner ${{ matrix.corner }} --ceiling ${{ matrix.ceiling }} \
-            --stride ${{ matrix.stride }} --extra-codes ${{ matrix.extra }} --jobs 2 \
+            --stride ${{ matrix.stride }} --extra-codes ${{ matrix.extra }} --jobs 2 --partition ${{ matrix.partition }} 3 \
             --netlist build/oscillator/cpz4_dco_pex.spice --output build/replay \
             --lib build/pdk/sky130A/libs.tech/ngspice/sky130.lib.spice
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: sweep-${{ matrix.corner }}-${{ matrix.partition }}
+          path: build/replay
+
+  extracted-replay:
+    needs: measure
+    if: always() && needs.measure.result != 'skipped'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        corner: [tt, ss, ff]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Assemble the corner's measured code pairs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq iverilog python3-numpy
+          gh run download "$GITHUB_RUN_ID" --pattern "sweep-${{ matrix.corner }}-*" --dir build/parts
+          python3 tests/qualify_pex.py combine build/parts/sweep-${{ matrix.corner }}-* --output build/replay
       - name: Check lock, dropout, recovery, and both detectors
         run: /usr/bin/python3 tests/qualify_pex.py replay --sampled --output build/replay
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
@@ -262,7 +292,8 @@ jobs:
           passed = (all(os.environ[k] == "success" for k in ("RTL", "OSC", "ROUTE", "REPLAY"))
                     and data["physical"].get("passed") and data["timing"].get("passed")
                     and data["area"].get("planning_fit") and data["replays_match_extraction"]
-                    and all(r.get("sampled_pass") for r in data["extracted_replays"].values())
+                    and all(r.get("sampled_pass") and r["coverage"]["within_400mhz_guard"]
+                            for r in data["extracted_replays"].values())
                     and set(upper) == {"tt", "ss"}
                     and all(float(r["frequency_mhz"]) >= 300 and int(r["bad_tap_sequences"]) == 0
                             for r in upper.values()))

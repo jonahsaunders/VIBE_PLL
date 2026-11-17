@@ -79,6 +79,7 @@ def spice_table(source, destination, *, ideal_quarter_bins=False, lut_point=None
             if sum(group) <= 0:
                 raise ValueError("The replacement phase shape must cover all coarse intervals")
             proportions.extend(width / sum(group) for width in group)
+    use_decoder = ("decoder_slots_ui" in rows[0] and not coarse_only and proportions is None and lut_point is None)
     sweeps = {}
     for row in rows:
         coarse, fine = int(row["code"]), int(row["fine_code"])
@@ -86,9 +87,13 @@ def spice_table(source, destination, *, ideal_quarter_bins=False, lut_point=None
         if coarse in points or not (0 <= coarse <= 255 and 0 <= fine <= 128):
             raise ValueError(f"Duplicate or invalid DCO code {coarse}:{fine}")
         has_coarse = coarse_only and all(row.get(f"bin_{i}_ui") for i in range(10))
-        if int(row["bad_tap_sequences"]) or (not has_coarse and int(row["bad_fine_sequences"])):
+        if int(row["bad_tap_sequences"]) or (not use_decoder and not has_coarse and int(row["bad_fine_sequences"])):
             raise ValueError(f"Illegal phase tap order at {coarse}:{fine}")
-        if has_coarse:
+        if use_decoder:
+            widths = [float(w) for w in row["decoder_slots_ui"].split()]
+            if int(row["unmodeled_decoder_cycles"]) or len(widths) != 90:
+                raise ValueError(f"Unsupported measured decoder waveform at {coarse}:{fine}")
+        elif has_coarse:
             widths = [width for i in range(10)
                       for width in (float(row[f"bin_{i}_ui"]), 0.0, 0.0, 0.0)]
         else:
@@ -110,7 +115,8 @@ def spice_table(source, destination, *, ideal_quarter_bins=False, lut_point=None
     max_code = max(max(points) for points in sweeps.values())
     curves = [coarse_curve(sweeps[fine], max_code) for fine in anchors]
     with destination.open("w", encoding="ascii") as file:
-        file.write(f"{len(anchors)} {max_code}\n" + " ".join(map(str, anchors)) + "\n")
+        columns = " 90" if use_decoder else ""
+        file.write(f"{len(anchors)} {max_code}{columns}\n" + " ".join(map(str, anchors)) + "\n")
         for code, entries in enumerate(zip(*curves)):
             if any(b[0] <= a[0] for a, b in zip(entries, entries[1:])):
                 raise ValueError(f"Nonmonotonic interpolated fine sweep at code {code}")

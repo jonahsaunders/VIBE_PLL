@@ -16,12 +16,18 @@ def packed_centers(path, corner):
     if len(rows) != 1 or rows[0]["corner"] != corner:
         raise ValueError(f"Expected one {corner} phase profile in {path}")
     row = rows[0]
-    widths = [float(row[f"fine_bin_{i}_ui"]) for i in range(40)]
-    if (int(row["bad_tap_sequences"]) or int(row["bad_fine_sequences"])
+    decoded = "decoder_slots_ui" in row
+    widths = ([float(w) for w in row["decoder_slots_ui"].split()] if decoded else
+              [float(row[f"fine_bin_{i}_ui"]) for i in range(40)])
+    bad = row["unmodeled_decoder_cycles"] if decoded else row["bad_fine_sequences"]
+    if (int(row["bad_tap_sequences"]) or int(bad) or len(widths) != (90 if decoded else 40)
             or not all(math.isfinite(w) and w >= 0 for w in widths)
             or not math.isclose(sum(widths), 1, abs_tol=1e-5)):
         raise ValueError(f"Invalid phase measurement in {path}")
-    return "".join(f"{center:03x}" for center in reversed(phase_centers(widths)))
+    centers = phase_centers(widths)
+    if decoded:
+        centers = [c for i, c in enumerate(centers) if (i % 9) % 2 == 1]
+    return "".join(f"{center:03x}" for center in reversed(centers))
 
 
 if __name__ == "__main__":

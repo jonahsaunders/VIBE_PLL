@@ -128,7 +128,7 @@ if {$detailed || $global_only} {
         estimate_parasitics -placement
         repair_design
         repair_timing -setup -setup_margin 1.0
-        repair_timing -hold -hold_margin 0.10
+        repair_timing -hold -hold_margin 0.20
         detailed_placement
     }
     write_def [file join $out before-route.def]
@@ -136,6 +136,18 @@ if {$detailed || $global_only} {
         -congestion_report_file [file join $out congestion.rpt] -verbose]
     if {$detailed} { lappend route_args -allow_congestion }
     global_route {*}$route_args
+    if {$detailed} {
+        # Recheck short data paths against the routed clock insertion delays.
+        # Leave margin for the difference between global and detailed wires.
+        estimate_parasitics -global_routing
+        repair_timing -hold -hold_margin 0.20
+        global_route -start_incremental -allow_congestion
+        detailed_placement
+        global_connect
+        global_route -end_incremental -allow_congestion
+        estimate_parasitics -global_routing
+        write_guides [file join $out pll.guide]
+    }
     write_def [file join $out placed.def]
     report_checks -path_delay min_max -group_path_count 5
     source [file join $here capture_paths.tcl]

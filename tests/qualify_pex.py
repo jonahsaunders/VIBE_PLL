@@ -20,37 +20,80 @@ def digest(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def characterize(args):
-    out = args.output
+def prepare(out):
     out.mkdir(parents=True, exist_ok=True)
-    table = out / "sweep.csv"
-    record = out / "source.json"
-    record.unlink(missing_ok=True)
+    (out / "source.json").unlink(missing_ok=True)
     (out / "qualification.json").unlink(missing_ok=True)
-    vdd, temp = CORNERS[args.corner]
-    codes = sorted(set(range(0, args.ceiling + 1, args.stride)) | set(args.extra_codes) | {args.ceiling})
+
+
+def save_sweep(out, rows, source):
     with tempfile.TemporaryDirectory(dir=out) as tmp:
-        def probe(code):
-            path = Path(tmp) / f"{code}.csv"
-            subprocess.run([sys.executable, ROOT / "spice/dco_deck.py", "--lib", args.lib,
-                            "--netlist", args.netlist, "--corner", args.corner, "--vdd", str(vdd),
-                            "--temp", str(temp), "--codes", str(code), "--fine-codes", "0,64,128",
-                            "--settle-ns", str(args.settle_ns), "--timeout", str(args.timeout),
-                            "--output", path], check=True)
-            with path.open(newline="") as f:
-                return list(csv.DictReader(f))
-        with ThreadPoolExecutor(args.jobs) as pool:
-            rows = [row for group in pool.map(probe, codes) for row in group]
         staged = Path(tmp) / "sweep.csv"
         with staged.open("w", newline="") as f:
             writer = csv.DictWriter(f, rows[0])
             writer.writeheader()
             writer.writerows(rows)
-        staged.replace(table)
-    record.write_text(json.dumps({"corner": args.corner, "vdd": vdd, "temp_c": temp,
-                                 "coarse_codes": codes, "fine_codes": [0, 64, 128], "settle_ns": args.settle_ns,
-                                 "netlist_sha256": digest(args.netlist), "sweep_sha256": digest(table)},
-                                 indent=2) + "\n")
+        source = {**source, "sweep_sha256": digest(staged)}
+        manifest = Path(tmp) / "source.json"
+        manifest.write_text(json.dumps(source, indent=2) + "\n")
+        staged.replace(out / "sweep.csv")
+        manifest.replace(out / "source.json")
+
+
+def characterize(args):
+    out = args.output
+    prepare(out)
+    vdd, temp = CORNERS[args.corner]
+    requested = sorted(set(range(0, args.ceiling + 1, args.stride)) | set(args.extra_codes) | {args.ceiling})
+    index, count = args.partition
+    if not 0 <= index < count <= len(requested):
+        raise ValueError("Partition must select at least one requested coarse code")
+    codes = requested[index::count]
+    with tempfile.TemporaryDirectory(dir=out) as tmp:
+        def probe(code):
+            path = Path(tmp) / f"{code}.csv"
+            settle_ns = max(args.zero_settle_ns, args.settle_ns) if code == 0 else args.settle_ns
+            subprocess.run([sys.executable, ROOT / "spice/dco_deck.py", "--lib", args.lib,
+                            "--netlist", args.netlist, "--corner", args.corner, "--vdd", str(vdd),
+                            "--temp", str(temp), "--codes", str(code), "--fine-codes", "0,64,128",
+                            "--measure-decoder", "--settle-ns", str(settle_ns), "--timeout", str(args.timeout),
+                            "--output", path], check=True)
+            with path.open(newline="") as f:
+                return list(csv.DictReader(f))
+        with ThreadPoolExecutor(args.jobs) as pool:
+            rows = [row for group in pool.map(probe, codes) for row in group]
+    save_sweep(out, rows, {"corner": args.corner, "vdd": vdd, "temp_c": temp, "coarse_codes": codes,
+                           "requested_codes": requested, "fine_codes": [0, 64, 128], "settle_ns": args.settle_ns,
+                           "zero_settle_ns": max(args.settle_ns, args.zero_settle_ns),
+                           "netlist_sha256": digest(args.netlist), "model_library_sha256": digest(args.lib),
+                           "characterizer_sha256": digest(ROOT / "spice/dco_deck.py")})
+
+
+def combine(args):
+    if any(path.resolve() == args.output.resolve() for path in args.inputs):
+        raise ValueError("Choose a separate output directory for the combined sweep")
+    prepare(args.output)
+    source, entries = None, {}
+    for part in args.inputs:
+        info = json.loads((part / "source.json").read_text())
+        codes = info.pop("coarse_codes")
+        table = part / "sweep.csv"
+        if info.pop("sweep_sha256") != digest(table) or (source is not None and info != source):
+            raise ValueError(f"Mismatched sweep provenance in {part}")
+        source = info
+        with table.open(newline="") as f:
+            rows = list(csv.DictReader(f))
+        points = {(int(r["code"]), int(r["fine_code"])): r for r in rows}
+        if (len(points) != len(rows) or entries.keys() & points.keys()
+                or set(points) != {(c, f) for c in codes for f in info["fine_codes"]}
+                or any((r["corner"], float(r["vdd"]), float(r["temp_c"])) !=
+                       (info["corner"], info["vdd"], info["temp_c"]) for r in rows)):
+            raise ValueError(f"Incomplete, duplicate, or wrong-corner measurements in {part}")
+        entries.update(points)
+    if set(entries) != {(c, f) for c in source["requested_codes"] for f in source["fine_codes"]}:
+        raise ValueError("Combined sweep is missing requested code pairs")
+    save_sweep(args.output, [entries[key] for key in sorted(entries)],
+               {**source, "coarse_codes": source["requested_codes"]})
 
 
 def coverage(rows):
@@ -79,6 +122,9 @@ def coverage(rows):
     if reached < 300:
         uncovered.append([reached, 300.0])
     return {"low_mhz": low, "high_mhz": high, "brackets_target": low <= 160 and high >= 300,
+            "within_400mhz_guard": max(freq for fine in rails.values() for freq in fine.values()) <= 400,
+            "max_measured_fallback_ui": max((float(r["coarse_fallback_ui"]) for r in rows
+                                             if r.get("coarse_fallback_ui")), default=None),
             "unmeasured_intervals": unmeasured, "gaps_mhz": holes,
             "uncovered_by_measured_rails_mhz": uncovered}
 
@@ -93,6 +139,8 @@ def replay(args):
     result_path = out / "qualification.json"
     result_path.unlink(missing_ok=True)
     source = json.loads((out / "source.json").read_text())
+    if source.get("requested_codes", source["coarse_codes"]) != source["coarse_codes"]:
+        raise ValueError("Combine all partitions before replaying the sweep")
     if digest(table) != source["sweep_sha256"]:
         raise ValueError("Sweep does not match the extracted-netlist record")
     with table.open(newline="") as f:
@@ -134,6 +182,9 @@ def replay(args):
                 watchdog = re.search(r"^WATCHDOG us=([\d.]+)", case.stdout, re.MULTILINE)
                 if watchdog:
                     result["reference_loss_us"] = float(watchdog[1])
+                activity = re.search(r"^DETECTOR samples=(\d+) coarse_fallback=(\d+)", case.stdout, re.MULTILINE)
+                if activity:
+                    result["detector_samples"], result["fallback_samples"] = map(int, activity.groups())
                 if case.returncode == 0 and not label.startswith("range"):
                     edges = np.loadtxt(edge_file, skiprows=1)
                     if len(edges) != args.edges:
@@ -161,9 +212,16 @@ def main():
     sweep.add_argument("--extra-codes", type=int, nargs="*", default=[],
                        help="also measure these codes, e.g. adjacent settings around the nominal channel")
     sweep.add_argument("--jobs", type=int, default=1)
-    sweep.add_argument("--settle-ns", type=float, default=900)
+    sweep.add_argument("--partition", nargs=2, type=int, default=(0, 1), metavar=("INDEX", "COUNT"),
+                       help="measure a disjoint subset for parallel runners, indexed from zero")
+    sweep.add_argument("--settle-ns", type=float, default=200, help="static settling window before measuring")
+    sweep.add_argument("--zero-settle-ns", type=float, default=900,
+                       help="minimum settling time at coarse zero, where oscillator startup is slower")
     sweep.add_argument("--timeout", type=int, default=1200)
     sweep.add_argument("--output", required=True, type=Path)
+    union = subs.add_parser("combine", help="verify and join partitions of the same extracted sweep")
+    union.add_argument("inputs", nargs="+", type=Path)
+    union.add_argument("--output", required=True, type=Path)
     check = subs.add_parser("replay")
     check.add_argument("--output", required=True, type=Path)
     check.add_argument("--edges", type=int, default=524288)
@@ -174,6 +232,8 @@ def main():
                 all(0 <= c <= args.ceiling for c in args.extra_codes)):
             p.error("Invalid ceiling, stride, or job count")
         return characterize(args)
+    if args.command == "combine":
+        return combine(args)
     if args.edges < 2:
         p.error("At least two edges are required")
     return replay(args)
