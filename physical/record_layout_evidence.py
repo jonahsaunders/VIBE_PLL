@@ -77,9 +77,15 @@ def main():
                             f"{float(row['frequency_mhz']):.4f} MHz | {row['missing_fine_bins']} |")
         shutil.copyfile(source, results / ("rev4-pex-" + name + ".csv"))
     url = f"https://github.com/jonahsaunders/VIBE_PLL/actions/runs/{a.run_id}"
-    rtl = (ROOT / "build/evidence/rtl.log").read_text()
-    passes = [re.sub(r"^\S+Z ", "", line) for line in rtl.splitlines() if "PASS " in line]
-    require(sum("PASS ref=" in line for line in passes) == 21, "Expected 21 passing PLL scenarios")
+    passes = []
+    for mode, count in (("fixed", 4), ("corners", 12), ("calibration", 4), ("tracking", 1)):
+        path = ROOT / "build/evidence/rtl" / (mode + ".json")
+        cases = json.loads(path.read_text())["scenarios"]
+        require(len(cases) == count and len({c["scenario"] for c in cases}) == count
+                and all(c["passed"] is True for c in cases), f"Incomplete {mode} regression")
+        passes.extend(f"{mode}/{c['scenario']} {line}" for c in cases for line in c["output"]
+                      if line.startswith("PASS ref="))
+    require(len(passes) == 21, "Expected 21 passing PLL scenarios")
     (results / "rev4-rtl-regression.txt").write_text(
         f"Source commit: {a.source_commit}\nWorkflow: {url}\n"
         "Modeled/schematic replay; not extracted PLL qualification.\n\n" + "\n".join(passes) + "\n")

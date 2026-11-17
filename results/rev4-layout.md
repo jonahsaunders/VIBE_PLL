@@ -62,7 +62,12 @@ antenna results, and keeps failing geometry under a `-review.gds` name.
 The authoritative result for each routed build is its
 `physical-verification.json`, with hashes of the actual GDS and reference.
 
-Full-PLL closure and extracted operating-range qualification remain pending
-until the corresponding build reports pass. Schematic replay results above
-do not establish extracted oscillator range, jitter, or physical CDC timing.
+The [standalone Rev. 4 route](https://github.com/jonahsaunders/VIBE_PLL/actions/runs/43496481088/job/132130802878)
+subsequently passed enabled geometry DRC (zero markers), device-level LVS,
+route DRC, antenna and supply connectivity at commit `8a66f63`. Worst max
+slack was −29.06 ns on a reset recovery path. A 32 MHz reference-clock path
+from the phase sampler to the fine DAC code missed by 22.77 ns.
+The [extracted maximum-code probes](https://github.com/jonahsaunders/VIBE_PLL/actions/runs/43496481088/job/132130803171)
+reached 294.6974 MHz at TT and 151.4959 MHz at slow-cold. Timing and
+operating-range qualification remain open for that revision.
 See [commands and configuration](../physical/README.md).

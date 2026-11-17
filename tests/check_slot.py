@@ -99,6 +99,7 @@ def main():
     parser.add_argument("--tracking-replicas", action="store_true",
                         help="select the phase tables for the DCO-biased replica netlist")
     parser.add_argument("--mapped-netlist", type=Path, help="export mapped Verilog for physical design")
+    parser.add_argument("--report", type=Path, help="write the floorplan estimate as JSON")
     args = parser.parse_args()
     positive_pair(parser, "--slot", args.slot)
     positive_pair(parser, "--dco-reserve", args.dco_reserve)
@@ -138,6 +139,16 @@ def main():
     site_area = SITE_WIDTH * ROW_HEIGHT
     allowance = math.floor(available * args.utilization)
     fits = occupied <= allowance and pack_rows(widths, row_widths)
+    if args.report:
+        args.report.write_text(json.dumps({
+            "die_um": args.slot, "die_mm2": math.prod(args.slot) / 1e6,
+            "dco_reserve_um": args.dco_reserve, "utilization_limit": args.utilization,
+            "mapped_cell_area_um2": occupied * site_area,
+            "available_row_area_um2": available * site_area,
+            "minimum_area_before_margins_mm2":
+                (occupied * site_area / args.utilization + dco_width * dco_height) / 1e6,
+            "planning_fit": fits,
+        }, indent=2) + "\n", encoding="utf-8")
     print(f"Slot {args.slot[0]:.2f} x {args.slot[1]:.2f} um; DCO reservation {dco_width:.2f} x {dco_height:.2f} um")
     print(f"Sky130 HD cells: {len(widths)}, area: {occupied*site_area:.2f} um^2")
     print(f"Available digital rows: {available*site_area:.2f} um^2, utilized: {100*occupied/available:.2f}%"

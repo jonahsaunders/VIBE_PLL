@@ -1,6 +1,9 @@
 name: Sky130 standalone route
 
 on:
+  pull_request:
+    paths-ignore:
+      - '**/*.md'
   workflow_dispatch:
   push:
     branches: [main, physical-bringup, codex/rev4-phase-detector]
@@ -9,6 +12,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
   rtl:
@@ -21,12 +25,18 @@ jobs:
           persist-credentials: false
       - name: Preserve PLL features
         run: |
+          mkdir -p build/rtl
           sudo apt-get update -qq
           sudo apt-get install -y -qq iverilog
-          python3 tests/run_rtl.py --fixed-centers
-          python3 tests/run_rtl.py --fixed-centers --corner-grid
-          python3 tests/run_rtl.py
-          python3 tests/run_rtl.py --fixed-centers --tracking-replicas --spice-data results/rev2-tt.csv --phase-shape results/rev4-tt-tracking-probe.csv
+          python3 tests/run_rtl.py --fixed-centers --report build/rtl/fixed.json
+          python3 tests/run_rtl.py --fixed-centers --corner-grid --report build/rtl/corners.json
+          python3 tests/run_rtl.py --report build/rtl/calibration.json
+          python3 tests/run_rtl.py --fixed-centers --tracking-replicas --spice-data results/rev2-tt.csv --phase-shape results/rev4-tt-tracking-probe.csv --report build/rtl/tracking.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: sky130-rtl
+          path: build/rtl
   oscillator:
     if: "!startsWith(github.event.head_commit.message, 'Diagnose ')"
     runs-on: ubuntu-24.04
@@ -64,7 +74,8 @@ jobs:
           python3 -m venv "$RUNNER_TEMP/vibe-oscillator"
           python="$RUNNER_TEMP/vibe-oscillator/bin/python"
           "$python" -m pip install klayout==0.30.13
-          "$python" physical/layout_dco.py --schematic spice/cpz4_dco_tracking.spice --output build/oscillator
+          "$python" spice/dco_deck.py --tracking-replicas --range-dco --emit build/oscillator/source.spice
+          "$python" physical/layout_dco.py --schematic build/oscillator/source.spice --output build/oscillator
           "$python" physical/check_dco.py --pdk "$RUNNER_TEMP/sky130/sky130A" --build build/oscillator
           "$python" tests/check_physical_guards.py --pdk "$RUNNER_TEMP/sky130/sky130A" --build build/oscillator
           export PDK_ROOT="$RUNNER_TEMP/sky130"
@@ -87,7 +98,9 @@ jobs:
             --corner ss --vdd 1.62 --temp 0 --codes 255 --fine-codes 128 \
             --output build/oscillator/pex-ss-max.csv &
           slow=$!
-          wait "$nominal" "$typical" "$slow"
+          failed=0
+          for pid in "$nominal" "$typical" "$slow"; do wait "$pid" || failed=1; done
+          test "$failed" = 0
           test -s build/oscillator/pex-tt.csv
           test -s build/oscillator/pex-tt-max.csv
           test -s build/oscillator/pex-ss-max.csv
@@ -157,6 +170,10 @@ jobs:
               print("LVS log tail:")
               print("\n".join(path.read_text().splitlines()[-30:]))
           PY
+      - name: Evaluate routed timing
+        if: always()
+        continue-on-error: true
+        run: python3 physical/check_timing.py build/standalone
       - name: Upload route outputs and diagnostics
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
@@ -164,3 +181,43 @@ jobs:
           name: sky130-standalone
           path: build/standalone
           if-no-files-found: warn
+
+  qualification:
+    needs: [rtl, oscillator, route]
+    if: always() && needs.route.result != 'skipped'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Collect available build results
+        run: gh run download "$GITHUB_RUN_ID" --dir build/artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - name: Publish measured limits
+        run: |
+          python3 physical/build_summary.py build/artifacts --commit "$GITHUB_SHA" --output build/summary
+          cat build/summary/summary.md >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: pll-summary
+          path: build/summary
+      - name: Require geometry, RTL, endpoint range and timing
+        env:
+          RTL: ${{ needs.rtl.result }}
+          OSC: ${{ needs.oscillator.result }}
+          ROUTE: ${{ needs.route.result }}
+        run: |
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          data = json.loads(Path("build/summary/summary.json").read_text())
+          upper = {r["corner"]: r for r in data["probes"] if (r["code"], r["fine_code"]) == ("255", "128")}
+          passed = (all(os.environ[k] == "success" for k in ("RTL", "OSC", "ROUTE"))
+                    and data["physical"].get("passed") and data["timing"].get("passed")
+                    and set(upper) == {"tt", "ss"}
+                    and all(float(r["frequency_mhz"]) >= 300 and int(r["bad_tap_sequences"]) == 0
+                            for r in upper.values()))
+          if not passed:
+              raise SystemExit("Standalone qualification failed; see the measured limits above.")
+          PY

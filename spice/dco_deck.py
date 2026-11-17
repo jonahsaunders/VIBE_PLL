@@ -44,17 +44,20 @@ def mos(name, pins, channel, width, length):
             f"pd={perimeter:.4g} ps={perimeter:.4g} nrd={0.29 / width:.4g} nrs={0.29 / width:.4g}")
 
 
-def schematic(replica_strength=1.0, tracking_replicas=False, filtered_bias=False):
+def schematic(replica_strength=1.0, tracking_replicas=False, filtered_bias=False, range_dco=False):
+    ring_drive = 2 if range_dco else 1
+    core_drive = 1.5 if range_dco else 1
+    starve_length = 0.34 if range_dco else 0.50
     lines = [
         "* SPDX-License-Identifier: Apache-2.0",
         "* CPZ4 DCO. Geometry is in microns under the Sky130 SPICE library scale.",
         "* Pins: vdd vss enable, therm_0..254, fine_therm_0..127, tap_0..4, fine_tap_0..14.",
 
         ".subckt cpz4_starved_stage a z bp bn vdd vss",
-        mos("p_starve", ("up", "bp", "vdd", "vdd"), "p", 5.6, 0.50),
-        mos("p_core", ("z", "a", "up", "vdd"), "p", 3.36, 0.15),
-        mos("n_core", ("z", "a", "down", "vss"), "n", 1.68, 0.15),
-        mos("n_starve", ("down", "bn", "vss", "vss"), "n", 2.8, 0.50),
+        mos("p_starve", ("up", "bp", "vdd", "vdd"), "p", 5.6 * ring_drive, starve_length),
+        mos("p_core", ("z", "a", "up", "vdd"), "p", 3.36 * core_drive, 0.15),
+        mos("n_core", ("z", "a", "down", "vss"), "n", 1.68 * core_drive, 0.15),
+        mos("n_starve", ("down", "bn", "vss", "vss"), "n", 2.8 * ring_drive, starve_length),
         ".ends cpz4_starved_stage",
     ]
     if tracking_replicas:
@@ -186,7 +189,7 @@ def dac_controls(code, destination, count, prefix, high, volts, step_s, skew_s):
 
 def make_deck(library, corner, volts, temperature, code, fine_code, aggregate=False,
               added_tap_load_ff=0, ripple_mv=0, ripple_mhz=10, filtered_bias=False,
-              cold_start=False, step_to=None, step_skew_ps=0):
+              cold_start=False, step_to=None, step_skew_ps=0, settle_ns=None):
     high_select = "control_high" if ripple_mv else "vdd"
     settle_s = BIAS_SETTLE_S if filtered_bias else RIPPLE_START_S
     final_coarse, final_fine = step_to if step_to else (code, fine_code)
@@ -212,7 +215,7 @@ def make_deck(library, corner, volts, temperature, code, fine_code, aggregate=Fa
                                         *TAP_PINS, *FINE_TAP_PINS), "cpz4_dco")
     supply = [f"Vdd vdd 0 {volts}"]
     enable = [f"Ven enable 0 PWL(0 0 10n 0 10.1n {volts})"]
-    duration = settle_s + 80e-9
+    duration = settle_s + 80e-9 if settle_ns is None else settle_ns * 1e-9 + 240e-9
     if cold_start:
         duration = 2e-6
     elif step_to:
@@ -258,16 +261,16 @@ def crossings(rows, threshold):
     return sorted(edges)
 
 
-def characterize(path, volts):
+def characterize(path, volts, start_s=110e-9):
     with path.open() as data:
         next(data)
         rows = [tuple(map(float, line.split())) for line in data if line.strip()]
     if len(rows) < 2 or len(rows[0]) != TAP_COUNT + 2:
         raise ValueError("Expected time, coarse and fine taps, and supply current in waveform.dat")
     edges = crossings(rows, volts / 2)
-    rises = [i for i, event in enumerate(edges) if event[1:] == (0, 1) and event[0] > 110e-9]
+    rises = [i for i, event in enumerate(edges) if event[1:] == (0, 1) and event[0] > start_s]
     if len(rises) < 5:
-        raise ValueError("Fewer than four complete oscillator periods after 110 ns")
+        raise ValueError(f"Fewer than four complete oscillator periods after {start_s*1e9:g} ns")
     rises = rises[-9:]
     cycles = [(edges[start:stop], edges[stop][0]) for start, stop in zip(rises, rises[1:])]
     periods, duty, min_bins, min_guards = [], [], [], []
@@ -474,14 +477,14 @@ def run_case(args, code, fine_code):
             source = re.sub(r"(?im)^\.subckt[ \t]+cpz4_dco[ \t]+[^\n]*(?:\n\+[^\n]*)*",
                             wrapped_line(".subckt", ("cpz4_dco", *expected), "").rstrip(), source, count=1)
         else:
-            source = schematic(args.replica_strength, args.tracking_replicas, args.filtered_bias)
+            source = schematic(args.replica_strength, args.tracking_replicas, args.filtered_bias, args.range_dco)
         if args.aggregate_dac:
             source = aggregate_dac(source, code, fine_code, args.lib, args.corner,
                                    bool(args.supply_ripple_mv), args.filtered_bias, args.step_to)
         (path / "cpz4_dco.spice").write_text(source, encoding="ascii")
         deck = make_deck(args.lib, args.corner, args.vdd, args.temp, code, fine_code, args.aggregate_dac,
                          args.added_tap_load_ff, args.supply_ripple_mv, args.supply_ripple_mhz,
-                         args.filtered_bias, args.cold_start, args.step_to, args.step_skew_ps)
+                         args.filtered_bias, args.cold_start, args.step_to, args.step_skew_ps, args.settle_ns)
         (path / "bench.cir").write_text(deck, encoding="ascii")
         command = [args.ngspice, "-n", "-b", "bench.cir"]
         if args.ngspice_dll:
@@ -504,7 +507,8 @@ def run_case(args, code, fine_code):
             return {**operating_point, "ripple_mv_peak": args.supply_ripple_mv,
                     "ripple_mhz": args.supply_ripple_mhz, "added_tap_load_ff": args.added_tap_load_ff,
                     "supply_pushing_mhz_per_v": round(pushing, 3)}
-        result = {**operating_point, **characterize(waveform, args.vdd)}
+        start_s = 110e-9 if args.settle_ns is None else args.settle_ns * 1e-9
+        result = {**operating_point, **characterize(waveform, args.vdd, start_s)}
         if args.cold_start or args.step_to:
             edges = list(tap0_edges(waveform, args.vdd))
             if args.cold_start:
@@ -565,6 +569,8 @@ def main():
     parser.add_argument("--aggregate-dac", action="store_true",
                         help="group DAC devices with identical selects, with mismatch disabled")
     parser.add_argument("--timeout", type=int, default=480, help="seconds per SPICE case")
+    parser.add_argument("--settle-ns", type=float,
+                        help="discard startup before a 240 ns static observation window")
     parser.add_argument("--output", type=Path, help="write summary CSV to this path")
     parser.add_argument("--keep-waveform", type=Path, help="write waveform samples in this directory")
     parser.add_argument("--added-tap-load-ff", type=float, default=0,
@@ -573,6 +579,8 @@ def main():
                         help="scale replica inverter widths, or starve widths with --tracking-replicas")
     parser.add_argument("--tracking-replicas", action="store_true",
                         help="use DCO-biased delay replicas with isolated sampling buffers")
+    parser.add_argument("--range-dco", action="store_true",
+                        help="use the higher-drive ring with locally placed tap buffers")
     parser.add_argument("--filtered-bias", action="store_true",
                         help="filter the reference bias to the oscillator base current and DACs")
     parser.add_argument("--cold-start", action="store_true",
@@ -588,6 +596,11 @@ def main():
     args = parser.parse_args()
     if args.dll_run:
         return run_shared_library(args.dll_run.resolve())
+    if args.range_dco and not args.tracking_replicas:
+        parser.error("--range-dco requires --tracking-replicas")
+    if args.settle_ns is not None and (not math.isfinite(args.settle_ns) or args.settle_ns < 0 or
+                                       args.cold_start or args.step_to or args.supply_ripple_mv):
+        parser.error("--settle-ns requires a static sweep and a finite, nonnegative settling time")
     if args.replica_strength is None:
         args.replica_strength = 2.0 if args.tracking_replicas else 1.0
     if not math.isfinite(args.replica_strength) or args.replica_strength <= 0:
@@ -610,7 +623,7 @@ def main():
             parser.error('--netlist requires --lib and uses the extracted DAC instances')
         args.netlist = args.netlist.resolve(strict=True)
     if args.emit:
-        source = schematic(args.replica_strength, args.tracking_replicas, args.filtered_bias)
+        source = schematic(args.replica_strength, args.tracking_replicas, args.filtered_bias, args.range_dco)
         args.emit.write_text(source, encoding="ascii", newline="\n")
     if args.lib:
         args.lib = args.lib.resolve(strict=True)

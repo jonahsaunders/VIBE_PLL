@@ -59,10 +59,8 @@ jobs:
           gh run download "$VERIFIED_RUN_ID" --repo "$GITHUB_REPOSITORY" \
             --name sky130-oscillator --dir build/evidence/oscillator
           cp build/evidence/route/physical-verification.json build/evidence/ci-verification.json
-          rtl_job=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$VERIFIED_RUN_ID/jobs" \
-            --jq '.jobs[] | select(.name == "rtl" and .conclusion == "success") | .id')
-          test -n "$rtl_job"
-          gh api "repos/$GITHUB_REPOSITORY/actions/jobs/$rtl_job/logs" > build/evidence/rtl.log
+          gh run download "$VERIFIED_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+            --name sky130-rtl --dir build/evidence/rtl
       - name: Install pinned verification inputs
         run: |
           set -euo pipefail

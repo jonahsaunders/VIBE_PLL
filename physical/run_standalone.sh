@@ -8,7 +8,7 @@ build=$(cd "$destination" && pwd)
 rm -f "$build/routed.def" "$build/routed.odb" "$build/routed.v" \
     "$build/routed.spef" "$build/route-violations.txt" "$build/route-checks.txt" \
     "$build/congestion.rpt" "$build/cpz4_sky130.gds" "$build/cpz4_sky130-review.gds" \
-    "$build/physical-verification.json"
+    "$build/physical-verification.json" "$build/area.json" "$build/timing-verification.json"
 platform=${ORFS_SKY130HD:-/OpenROAD-flow-scripts/flow/platforms/sky130hd}
 python=${PYTHON:-python3}
 klayout=${KLAYOUT:-klayout}
@@ -23,8 +23,9 @@ export MAPPED_VERILOG="$build/cpz4_sky130.v"
 export OUT_DIR="$build"
 export RUN_DETAIL_ROUTE=1
 export TRACKING_REPLICAS=${TRACKING_REPLICAS:-1}
-export DIE_AREA=${DIE_AREA:-"0 0 600 400"}
-export CORE_AREA=${CORE_AREA:-"5 5 595 395"}
+export DIE_AREA=${DIE_AREA:-"0 0 460 330"}
+export CORE_AREA=${CORE_AREA:-"5 5 455 325"}
+export PLACE_DENSITY=${PLACE_DENSITY:-0.62}
 export DCO_RESERVE=${DCO_RESERVE:-"298 123"}
 if [[ -z ${RCX_RULES:-} && -r "$platform/rcx_patterns.rules" ]]; then
     export RCX_RULES="$platform/rcx_patterns.rules"
@@ -35,6 +36,11 @@ case "$TRACKING_REPLICAS" in
     1) replica_args+=(--tracking-replicas); map_args+=(--tracking-replicas) ;;
     0) ;;
     *) echo "TRACKING_REPLICAS must be 0 or 1" >&2; exit 2 ;;
+esac
+case "${RANGE_DCO:-$TRACKING_REPLICAS}" in
+    1) replica_args+=(--range-dco) ;;
+    0) ;;
+    *) echo "RANGE_DCO must be 0 or 1" >&2; exit 2 ;;
 esac
 case "${ON_CHIP_CAL:-0}" in
     1) map_args+=(--on-chip-cal) ;;
@@ -50,7 +56,7 @@ read -r reserve_width reserve_height <<< "$DCO_RESERVE"
 "$python" "$root/tests/check_slot.py" --liberty "$LIBERTY" --lef "$CELLS_LEF" \
     --slot "$die_width" "$die_height" --dco-reserve "$reserve_width" "$reserve_height" \
     --edge-reserve 5 --utilization 0.65 "${map_args[@]}" \
-    --mapped-netlist "$MAPPED_VERILOG" | tee "$build/area.log"
+    --report "$build/area.json" --mapped-netlist "$MAPPED_VERILOG" | tee "$build/area.log"
 route_status=0
 "$openroad" -threads 4 -exit "$root/physical/floorplan.tcl" 2>&1 | tee "$build/openroad.log" || route_status=$?
 if [[ ! -s "$build/routed.def" || ! -s "$build/routed.odb" ]]; then

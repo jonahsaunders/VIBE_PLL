@@ -6,7 +6,17 @@ The PLL has a coarse/fine DCO, a 40-bin phase detector, selectable tracking band
 
 ![Rev. 4 tracking-replica oscillator layout](docs/rev4-dco-layout.png)
 
-The tracking-replica oscillator layout passes the enabled geometry DRC checks and device-level LVS. [Layout verification and full-PLL status](results/rev4-layout.md).
+The [Rev. 4 standalone build at `8a66f63`](https://github.com/jonahsaunders/VIBE_PLL/actions/runs/43496481088) passed its enabled geometry checks and full-device LVS. Its fixed-code, capacitance-extracted oscillator probes and routed timing establish this comparison baseline.
+
+| Rev. 4 measurement | Result | Design target |
+| --- | --- | --- |
+| TT, 1.80 V, 25 °C at coarse:fine 52:64 | 98.78 MHz, 10 of 40 fine bins missing | Nominal locked channel 256.25 MHz |
+| TT at maximum code 255:128 | 294.70 MHz, 15 bins missing | Cover through 300 MHz |
+| SS, 1.62 V, 0 °C at 255:128 | 151.50 MHz, 14 bins missing | Cover 160–300 MHz |
+| Routed TT worst max/min slack | −29.06 ns / +0.12 ns | Both ≥ 0 ns |
+| Routed outline | 600 × 400 µm (0.240 mm²) | Provisional 0.100 mm² |
+
+[Oscillator measurements](https://github.com/jonahsaunders/VIBE_PLL/actions/runs/43496481088/job/132130803171) · [Routed timing, geometry and connectivity](https://github.com/jonahsaunders/VIBE_PLL/actions/runs/43496481088/job/132130802878)
 
 - [Design, controls, and timing](docs/design.md)
 - [Chipalooza #4 proposal](docs/proposal.md)

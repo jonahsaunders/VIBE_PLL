@@ -112,12 +112,25 @@ module cpz4_pll #(
             assign cal_error = 0;
         end
     endgenerate
+    // Capture the count, decoded phase and validity from the same sample.
+    // This separates the asynchronous-tap decoder from the loop arithmetic.
+    reg [23:0] measured_phase;
+    reg measured_valid;
+    always @(posedge ref_clk or negedge run_n) begin
+        if (!run_n) begin
+            measured_phase <= 0;
+            measured_valid <= 0;
+        end else begin
+            measured_phase <= {cycles, phase_center};
+            measured_valid <= phase_valid;
+        end
+    end
     cpz4_loop_control loop_filter(.ref_clk(ref_clk), .reset_n(run_n), .restart(restart),
         .ref_timeout(watchdog_ref), .manual(manual), .dither_enable(dither),
         .narrow_near_integer(narrow_near_integer),
         .manual_code(manual_code), .code_ceiling(code_ceiling), .ref_upper_mhz(ref_upper_mhz),
-        .tracking_gear(tracking_gear), .ratio_q12(ratio), .phase_valid(phase_valid),
-        .phase_q12({cycles, phase_center}), .dco_code(dco_code), .fine_code(fine_code),
+        .tracking_gear(tracking_gear), .ratio_q12(ratio), .phase_valid(measured_valid),
+        .phase_q12(measured_phase), .dco_code(dco_code), .fine_code(fine_code),
         .locked(core_locked), .fault_code(loop_fault), .gain_q12(gain), .state(loop_state));
 
     // Register each cell command to avoid decoder glitches during binary carries.

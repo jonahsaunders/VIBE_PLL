@@ -83,3 +83,14 @@ foreach {pattern count source budget} {
 }
 set_clock_uncertainty 0.1 [get_clocks {dco_clk dco_div2 dco_div4}]
 set_clock_uncertainty 0.2 [get_clocks ref_clk]
+
+# run_reset is asynchronous to the oscillator. Only the reset inputs of
+# its two release synchronizer stages may deassert asynchronously. Time
+# the synchronizer data path and every downstream recovery/removal check.
+set release_nets [get_nets -regexp {^controller\.oscillator_reset\.release_pipe\[[01]\]$}]
+set release_data [cpz4_capture_flop_inputs $release_nets 2]
+foreach pin [dict values $release_data] {
+    set reset_pin [get_pins -of_objects [get_cells -of_objects $pin] -filter {name==RESET_B}]
+    if {[llength $reset_pin] != 1} { error "Missing oscillator release reset pin on $pin" }
+    set_false_path -from [get_clocks ref_clk] -to $reset_pin
+}

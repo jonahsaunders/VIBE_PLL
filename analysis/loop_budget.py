@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Sampled-loop linearization, jitter estimates, and supply tone budgets.
 
-Requires NumPy. The model includes one actuation cycle and two capture cycles,
+Requires NumPy. The model includes one actuation cycle and three capture cycles,
 plus the accumulator's own unit delay. The default estimate uses an idealized
 detector quantizer. Optional spectra supply reference, DCO, and rail noise.
 """
@@ -15,7 +15,7 @@ import numpy as np
 
 def open_loop(normalized_frequency, a, b):
     q = np.exp(-2j * np.pi * normalized_frequency)
-    return q**4 * (a + b / (1 - q)) / (1 - q)
+    return q**5 * (a + b / (1 - q)) / (1 - q)
 
 
 def tracking_coefficients(gain_ratio, tracking_gear):

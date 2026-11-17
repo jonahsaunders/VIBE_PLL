@@ -112,7 +112,22 @@ if {$detailed || $global_only} {
         write_def [file join $out power.def]
         clock_tree_synthesis -root_buf sky130_fd_sc_hd__clkbuf_4 \
             -buf_list {sky130_fd_sc_hd__clkbuf_2 sky130_fd_sc_hd__clkbuf_4}
+        # CTS derives scalar names from bus-bit clock roots. Use plain names
+        # for its new objects before exporting either Verilog or SPEF.
+        foreach objects [list [$block getInsts] [$block getNets]] {
+            foreach obj $objects {
+                set name [$obj getName]
+                if {[regexp {^(clkbuf_|clknet_|delaybuf_)} $name] && [regexp {[][]} $name]} {
+                    set clean [string map [list {[} {_bit_} {]} {}] $name]
+                    if {![$obj rename $clean]} { error "Clock-tree name collision: $clean" }
+                }
+            }
+        }
         set_propagated_clock [all_clocks]
+        estimate_parasitics -placement
+        repair_design
+        repair_timing -setup
+        repair_timing -hold
         detailed_placement
     }
     write_def [file join $out before-route.def]
@@ -178,6 +193,7 @@ if {$detailed || $global_only} {
             set spef [file join $out routed.spef]
             write_spef $spef
             read_spef $spef
+            puts "Loaded routed SPEF $spef"
         } else {
             estimate_parasitics -global_routing
         }

@@ -87,8 +87,9 @@ def lef_name(name):
 
 
 class Layout:
-    def __init__(self, tracking=False):
+    def __init__(self, tracking=False, local_buffers=False):
         self.tracking = tracking
+        self.local_buffers = local_buffers
         self.width = 290_000 if tracking else WIDTH
         self.height = 115_000 if tracking else HEIGHT
         self.vdd_x = self.width - 1_100
@@ -380,9 +381,15 @@ def stage_row(stage, tracking=False):
 
 def draw_core(layout, devices, start_y):
     points = {}
+    # The higher-drive ring uses a dedicated column for the grounded MIM
+    # terminal and keeps both stages of the launch and sample buffers local.
     p_top, n_top = layout.height - 2_000, 82_750
     ring_left, ring_pitch = 26_600, 7_000
     delay_left, delay_pitch = 62_300, (42_000 if layout.tracking else 10_500)
+    local_count, cap_ground = 6, 6_300
+    if layout.local_buffers:
+        ring_pitch, delay_left, delay_pitch = 14_000, 98_700, 35_700
+        local_count, cap_ground = 12, 13_300
     p_depth, n_depth = (11_200, 5_600) if layout.tracking else (8_410, 4_220)
     p_landing, n_landing = p_top - p_depth - 1_790, n_top - n_depth - 730
     layout.rect("nwell", 3_450, p_top - p_depth - 440, layout.width - 3_800, layout.height - 220)
@@ -439,18 +446,19 @@ def draw_core(layout, devices, start_y):
         x = ring_left + position * ring_pitch
         names = stage_row(i, layout.tracking)
         for model, top, landing in ((PMOS, p_top, p_landing), (NMOS, n_top, n_landing)):
-            group = [name for name in names[:6] if name in devices and devices[name].model == model]
+            group = [name for name in names[:local_count] if name in devices and devices[name].model == model]
             column = x
             for name in group:
                 column = place(devices.pop(name), column, top, landing)
-            group = [name for name in names[6:] if name in devices and devices[name].model == model]
+            group = [name for name in names[local_count:] if name in devices and devices[name].model == model]
             column = delay_left + position * delay_pitch
             for name in group:
                 column = place(devices.pop(name), column, top, landing)
             if column > delay_left + (position + 1) * delay_pitch:
                 raise ValueError(f"Replica stage {i} exceeds its placement channel")
         cap = devices.pop(f"load{i}")
-        a, b = layout.capacitor(cap, x + 2_100 - cap.dimension("w") // 2, layout.height - 4_200, x + 6_300)
+        a, b = layout.capacitor(cap, x + 2_100 - cap.dimension("w") // 2,
+                                layout.height - 4_200, x + cap_ground)
         points.setdefault(cap.nets[0], []).append(a)
         points.setdefault(cap.nets[1], []).append(b)
 
@@ -495,6 +503,9 @@ def route_core(layout, points, ports, n_landing, p_landing):
     channels = {}
     for net, terminals in sorted(points.items(), key=lambda item: min(p[1] for p in item[1])):
         left, right = min(p[1] for p in terminals), max(p[1] for p in terminals)
+        if layout.local_buffers and net.startswith(("tap_", "fine_tap_")):
+            center = (left + right) // 10 * 5
+            left, right = min(left, center - 1_000), max(right, center + 1_000)
         index = next((i for i, spans in enumerate(tracks)
                       if all(right + 700 < a or left - 700 > b for a, b in spans)), None)
         if index is None:
@@ -573,7 +584,8 @@ def main():
     args.output.mkdir(parents=True, exist_ok=True)
     ports, devices = schematic_devices(args.schematic)
     tracking = "delay0_p_starve" in devices
-    layout = Layout(tracking=tracking)
+    layout = Layout(tracking=tracking,
+                    local_buffers=tracking and devices["s0_p_starve"].dimension("w") > 5_600)
     todo = devices.copy()
     dac_top = draw_dac(layout, todo)
     core, n_landing, p_landing = draw_core(layout, todo, dac_top)
