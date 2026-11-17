@@ -67,8 +67,20 @@ def coverage(rows):
         elif max(160, rails[a][128]) < min(300, rails[b][0]):
             holes.append([a, b, rails[b][0] - rails[a][128]])
     low, high = rails[codes[0]][0], rails[codes[-1]][128]
+    # Identify the target sub-bands that still depend on coarse interpolation.
+    # Overlapping measured rails can cover a sub-band even with codes skipped.
+    reached, uncovered = 160.0, []
+    for first, last in sorted((r[0], r[128]) for r in rails.values()):
+        if last < reached or first > 300:
+            continue
+        if first > reached:
+            uncovered.append([reached, first])
+        reached = max(reached, min(300.0, last))
+    if reached < 300:
+        uncovered.append([reached, 300.0])
     return {"low_mhz": low, "high_mhz": high, "brackets_target": low <= 160 and high >= 300,
-            "unmeasured_intervals": unmeasured, "gaps_mhz": holes}
+            "unmeasured_intervals": unmeasured, "gaps_mhz": holes,
+            "uncovered_by_measured_rails_mhz": uncovered}
 
 
 def replay(args):

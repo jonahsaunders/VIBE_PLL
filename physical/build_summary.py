@@ -3,6 +3,7 @@
 """Publish the observed physical limits, including incomplete and failed builds."""
 import argparse
 import csv
+import hashlib
 import json
 from pathlib import Path
 
@@ -30,8 +31,14 @@ def main():
                 probes.extend(csv.DictReader(f))
     a.output.mkdir(parents=True, exist_ok=True)
     replays = {c: load(a.artifacts / f"replay-{c}" / "qualification.json") for c in ("tt", "ss", "ff")}
+    pex = osc / "cpz4_dco_pex.spice"
+    pex_sha = hashlib.sha256(pex.read_bytes()).hexdigest() if pex.is_file() else None
+    same_extraction = bool(pex_sha) and all(
+        (r.get("source", {}).get("corner"), r.get("source", {}).get("netlist_sha256")) == (c, pex_sha)
+        for c, r in replays.items())
     data = {"commit": a.commit, "area": area, "physical": geometry, "timing": timing,
-            "probes": probes, "extracted_replays": replays}
+            "probes": probes, "extracted_replays": replays, "oscillator_pex_sha256": pex_sha,
+            "replays_match_extraction": same_extraction}
     (a.output / "summary.json").write_text(json.dumps(data, indent=2) + "\n")
     def status(record):
         return {True: "pass", False: "fail", None: "unavailable"}[record.get("passed")]
@@ -39,6 +46,7 @@ def main():
              "| Check | Result |", "| --- | --- |",
              f"| Enabled geometry and device LVS | {status(geometry)} |",
              f"| Routed timing | {status(timing)} |",
+             f"| All replay inputs match this build's oscillator extraction | {same_extraction} |",
              f"| Worst max / min slack (ns) | {timing.get('setup_wns_ns')} / {timing.get('hold_wns_ns')} |",
              f"| Die area (mm²) | {area.get('die_mm2', 'unavailable')} |",
              "", "| Corner | Coarse:fine | Extracted MHz | Missing fine bins | Bad coarse / fine cycles |",

@@ -28,6 +28,7 @@ jobs:
           mkdir -p build/rtl
           sudo apt-get update -qq
           sudo apt-get install -y -qq iverilog
+          python3 tests/check_phase_tables.py --tt results/range-dco/tt-40-64.csv --ss results/range-dco/ss-136-64.csv
           python3 tests/run_rtl.py --fixed-centers --report build/rtl/fixed.json
           python3 tests/run_rtl.py --fixed-centers --corner-grid --report build/rtl/corners.json
           python3 tests/run_rtl.py --report build/rtl/calibration.json
@@ -190,9 +191,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - {corner: tt, ceiling: 96, stride: 24, extra: '52 53 57 58'}
-          - {corner: ss, ceiling: 255, stride: 48, extra: '239 240 254'}
-          - {corner: ff, ceiling: 64, stride: 16, extra: '31 33'}
+          - {corner: tt, ceiling: 64, stride: 16, extra: '37 38 40 52 53'}
+          - {corner: ss, ceiling: 192, stride: 32, extra: '136 159 169 170'}
+          - {corner: ff, ceiling: 48, stride: 12, extra: '23 25 31 32'}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
@@ -260,6 +261,8 @@ jobs:
           upper = {r["corner"]: r for r in data["probes"] if (r["code"], r["fine_code"]) == ("255", "128")}
           passed = (all(os.environ[k] == "success" for k in ("RTL", "OSC", "ROUTE", "REPLAY"))
                     and data["physical"].get("passed") and data["timing"].get("passed")
+                    and data["area"].get("planning_fit") and data["replays_match_extraction"]
+                    and all(r.get("sampled_pass") for r in data["extracted_replays"].values())
                     and set(upper) == {"tt", "ss"}
                     and all(float(r["frequency_mhz"]) >= 300 and int(r["bad_tap_sequences"]) == 0
                             for r in upper.values()))

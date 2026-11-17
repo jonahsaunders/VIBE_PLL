@@ -103,11 +103,11 @@ module cpz4_pll #(
             // Capacitance-extracted range-DCO probes in results/range-dco.
             // Bin 0 occupies the least significant 12 bits of each table.
             localparam [479:0] RANGE_TT = {
-                120'hffffffffff3de7ae7ae7adaccdecde, 120'hcdec14b4ab4ab4aa7b9ac9ac9ac8e9,
-                120'h82682682674a66e66e66e5b14f34f3, 120'h4f34123323323322701ae1ae19e0c7};
+                120'hffffffffff76eeceeceecde5cdecde, 120'hcdec4ebbdbbdbb8aaa9a29a29a291f,
+                120'h89b89b89b7826696696695e9569569, 120'h56944e3333333332ab2232232100ff};
             localparam [479:0] RANGE_SS = {
-                120'hffffffff7f12e35e35e35db1d2dd2d, 120'hcfdbffb31b31b1fa5d9ac9ac9888af,
-                120'h7fa7fa7fa7326696696695a54e04e0, 120'h4e043f39d39d35524718018016c0ac};
+                120'hffffffffff43e85e85e85dd1d1dd1d, 120'hd1dc49b76b76b5ba709a19a19a18f3,
+                120'h84584583c74c6636636635c2520520, 120'h5194443763763762a11cc1cc1af0c9};
             localparam [959:0] PROFILES = RANGE_DCO ? {RANGE_SS, RANGE_TT} : TRACKING_REPLICAS ?
                 {TRACKING_SLOW_CENTERS, TRACKING_FINE_CENTERS} : {SLOW_FINE_CENTERS, FIXED_FINE_CENTERS};
             wire [6:0] detector_index = slow_phase_profile ? {1'b0, fine_bin} + 7'd40 : {1'b0, fine_bin};

@@ -47,7 +47,7 @@ def mos(name, pins, channel, width, length):
 def schematic(replica_strength=1.0, tracking_replicas=False, filtered_bias=False, range_dco=False):
     ring_drive = 2 if range_dco else 1
     core_drive = 1.5 if range_dco else 1
-    starve_length = 0.34 if range_dco else 0.50
+    starve_length = 0.23 if range_dco else 0.50
     lines = [
         "* SPDX-License-Identifier: Apache-2.0",
         "* CPZ4 DCO. Geometry is in microns under the Sky130 SPICE library scale.",
