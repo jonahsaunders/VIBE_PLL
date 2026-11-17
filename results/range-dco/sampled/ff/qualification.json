@@ -1,0 +1,374 @@
+{
+  "passed": false,
+  "sampled_pass": true,
+  "source": {
+    "corner": "ff",
+    "vdd": 1.95,
+    "temp_c": 0.0,
+    "coarse_codes": [
+      0,
+      12,
+      24
+    ],
+    "fine_codes": [
+      0,
+      64,
+      128
+    ],
+    "netlist_sha256": "f7d523c8cda19a4d1f92c4fcff04985cf8ef561f693ae2a5bf3f7deb3d5d81ea",
+    "sweep_sha256": "7a0620e07a67d254cbecd6428a8737bb06c24e57b003d7cce6ee14657fb6f326",
+    "settling": "650 ns at coarse zero, default static window at other codes",
+    "decoder": "measured thermometer word and coarse fallback"
+  },
+  "coverage": {
+    "low_mhz": 133.3188,
+    "high_mhz": 333.2631,
+    "brackets_target": true,
+    "within_400mhz_guard": true,
+    "max_measured_fallback_ui": 0.13665189,
+    "unmeasured_intervals": [
+      [
+        0,
+        12
+      ],
+      [
+        12,
+        24
+      ]
+    ],
+    "gaps_mhz": [],
+    "uncovered_by_measured_rails_mhz": []
+  },
+  "cases": [
+    {
+      "case": "fine-range-16",
+      "passed": true,
+      "locks_us": {
+        "fractional_default": 22.25,
+        "integer_retune": 48.75,
+        "reference_return": 48.719,
+        "invalid_sample_recovery": 47.938
+      },
+      "mean_frequency": [
+        {
+          "target_mhz": 160.0,
+          "measured_mhz": 160.0001996,
+          "error_ppm": 1.25
+        },
+        {
+          "target_mhz": 300.0,
+          "measured_mhz": 299.9900279,
+          "error_ppm": -33.24
+        }
+      ],
+      "reference_loss_us": 0.831,
+      "detector_samples": 3438,
+      "fallback_samples": 109
+    },
+    {
+      "case": "fine-range",
+      "passed": true,
+      "locks_us": {
+        "fractional_default": 13.6,
+        "integer_retune": 28.15,
+        "reference_return": 27.981,
+        "invalid_sample_recovery": 27.45
+      },
+      "mean_frequency": [
+        {
+          "target_mhz": 160.0,
+          "measured_mhz": 160.0003826,
+          "error_ppm": 2.39
+        },
+        {
+          "target_mhz": 300.0,
+          "measured_mhz": 299.9999182,
+          "error_ppm": -0.27
+        }
+      ],
+      "reference_loss_us": 0.837,
+      "detector_samples": 2857,
+      "fallback_samples": 104
+    },
+    {
+      "case": "fine-range-32",
+      "passed": true,
+      "locks_us": {
+        "fractional_default": 8.344,
+        "integer_retune": 18.812,
+        "reference_return": 18.586,
+        "invalid_sample_recovery": 18.469
+      },
+      "mean_frequency": [
+        {
+          "target_mhz": 160.0,
+          "measured_mhz": 159.9998338,
+          "error_ppm": -1.04
+        },
+        {
+          "target_mhz": 300.0,
+          "measured_mhz": 300.0049495,
+          "error_ppm": 16.5
+        }
+      ],
+      "reference_loss_us": 0.847,
+      "detector_samples": 3350,
+      "fallback_samples": 15
+    },
+    {
+      "case": "fine-41984",
+      "passed": true,
+      "locks_us": {
+        "fractional_default": 21.76
+      },
+      "mean_frequency": [
+        {
+          "target_mhz": 256.25,
+          "measured_mhz": 256.2516591,
+          "error_ppm": 6.47
+        }
+      ],
+      "detector_samples": 56204,
+      "fallback_samples": 1,
+      "spectrum_1khz_10mhz": {
+        "clock_mhz": 256.2499983105182,
+        "rms_tie_ps": 33.924938216900024,
+        "band_tie_ps": 34.89321236689807,
+        "offset_hz": -3421.306587550406,
+        "strongest_line_dbc": -31.739181494350536,
+        "resolution_hz": 488.75808393577233
+      }
+    },
+    {
+      "case": "fine-40959",
+      "passed": true,
+      "locks_us": {
+        "fractional_default": 21.04
+      },
+      "mean_frequency": [
+        {
+          "target_mhz": 249.9938965,
+          "measured_mhz": 249.9953438,
+          "error_ppm": 5.79
+        }
+      ],
+      "detector_samples": 57482,
+      "fallback_samples": 2,
+      "spectrum_1khz_10mhz": {
+        "clock_mhz": 249.9938961976635,
+        "rms_tie_ps": 98.30166926195024,
+        "band_tie_ps": 97.44634246173027,
+        "offset_hz": 30516.833031941347,
+        "strongest_line_dbc": -20.964913300310783,
+        "resolution_hz": 476.82551612408355
+      }
+    },
+    {
+      "case": "fine-40961",
+      "passed": true,
+      "locks_us": {
+        "fractional_default": 20.88
+      },
+      "mean_frequency": [
+        {
+          "target_mhz": 250.0061035,
+          "measured_mhz": 250.0092677,
+          "error_ppm": 12.66
+        }
+      ],
+      "detector_samples": 57475,
+      "fallback_samples": 2,
+      "spectrum_1khz_10mhz": {
+        "clock_mhz": 250.0061036549583,
+        "rms_tie_ps": 102.89027665460459,
+        "band_tie_ps": 101.53021694320252,
+        "offset_hz": -30518.323200068153,
+        "strongest_line_dbc": -19.828052529382752,
+        "resolution_hz": 476.8488000010649
+      }
+    },
+    {
+      "case": "fine-narrow-40959",
+      "passed": true,
+      "locks_us": {
+        "fractional_default": 21.04
+      },
+      "mean_frequency": [
+        {
+          "target_mhz": 249.9938965,
+          "measured_mhz": 249.987194,
+          "error_ppm": -26.81
+        }
+      ],
+      "detector_samples": 57482,
+      "fallback_samples": 2,
+      "spectrum_1khz_10mhz": {
+        "clock_mhz": 249.99389571076395,
+        "rms_tie_ps": 123.85827100403421,
+        "band_tie_ps": 121.96104639709515,
+        "offset_hz": 30516.832972505366,
+        "strongest_line_dbc": -21.5337649329095,
+        "resolution_hz": 476.82551519539635
+      }
+    },
+    {
+      "case": "fine-narrow-40961",
+      "passed": true,
+      "locks_us": {
+        "fractional_default": 20.88
+      },
+      "mean_frequency": [
+        {
+          "target_mhz": 250.0061035,
+          "measured_mhz": 249.9987398,
+          "error_ppm": -29.45
+        }
+      ],
+      "detector_samples": 57475,
+      "fallback_samples": 2,
+      "spectrum_1khz_10mhz": {
+        "clock_mhz": 250.00610374104807,
+        "rms_tie_ps": 83.13919638139978,
+        "band_tie_ps": 81.9877342999261,
+        "offset_hz": -30518.323210577157,
+        "strongest_line_dbc": -21.317957562254414,
+        "resolution_hz": 476.8488001652681
+      }
+    },
+    {
+      "case": "coarse-range-16",
+      "passed": true,
+      "locks_us": {
+        "fractional_default": 22.188,
+        "integer_retune": 48.625,
+        "reference_return": 48.72,
+        "invalid_sample_recovery": 48.188
+      },
+      "mean_frequency": [
+        {
+          "target_mhz": 160.0,
+          "measured_mhz": 159.9998592,
+          "error_ppm": -0.88
+        },
+        {
+          "target_mhz": 300.0,
+          "measured_mhz": 299.9899296,
+          "error_ppm": -33.57
+        }
+      ],
+      "reference_loss_us": 0.829
+    },
+    {
+      "case": "coarse-range",
+      "passed": true,
+      "locks_us": {
+        "fractional_default": 13.55,
+        "integer_retune": 28.05,
+        "reference_return": 27.9,
+        "invalid_sample_recovery": 27.6
+      },
+      "mean_frequency": [
+        {
+          "target_mhz": 160.0,
+          "measured_mhz": 160.0009566,
+          "error_ppm": 5.98
+        },
+        {
+          "target_mhz": 300.0,
+          "measured_mhz": 300.0000039,
+          "error_ppm": 0.01
+        }
+      ],
+      "reference_loss_us": 0.837
+    },
+    {
+      "case": "coarse-range-32",
+      "passed": true,
+      "locks_us": {
+        "fractional_default": 8.281,
+        "integer_retune": 18.656,
+        "reference_return": 18.584,
+        "invalid_sample_recovery": 18.438
+      },
+      "mean_frequency": [
+        {
+          "target_mhz": 160.0,
+          "measured_mhz": 160.0005908,
+          "error_ppm": 3.69
+        },
+        {
+          "target_mhz": 300.0,
+          "measured_mhz": 300.0064393,
+          "error_ppm": 21.46
+        }
+      ],
+      "reference_loss_us": 0.85
+    },
+    {
+      "case": "coarse-41984",
+      "passed": true,
+      "locks_us": {
+        "fractional_default": 21.76
+      },
+      "mean_frequency": [
+        {
+          "target_mhz": 256.25,
+          "measured_mhz": 256.2516591,
+          "error_ppm": 6.47
+        }
+      ],
+      "spectrum_1khz_10mhz": {
+        "clock_mhz": 256.25000220349926,
+        "rms_tie_ps": 32.96702086162196,
+        "band_tie_ps": 34.913147769227756,
+        "offset_hz": 4398.8228222494,
+        "strongest_line_dbc": -33.968945153940986,
+        "resolution_hz": 488.7580913610444
+      }
+    },
+    {
+      "case": "coarse-40959",
+      "passed": true,
+      "locks_us": {
+        "fractional_default": 21.04
+      },
+      "mean_frequency": [
+        {
+          "target_mhz": 249.9938965,
+          "measured_mhz": 249.9970962,
+          "error_ppm": 12.8
+        }
+      ],
+      "spectrum_1khz_10mhz": {
+        "clock_mhz": 249.99389618946228,
+        "rms_tie_ps": 98.66025711947859,
+        "band_tie_ps": 97.71208185640951,
+        "offset_hz": 30516.83303094022,
+        "strongest_line_dbc": -20.6395504408951,
+        "resolution_hz": 476.8255161084409
+      }
+    },
+    {
+      "case": "coarse-40961",
+      "passed": true,
+      "locks_us": {
+        "fractional_default": 20.88
+      },
+      "mean_frequency": [
+        {
+          "target_mhz": 250.0061035,
+          "measured_mhz": 250.0059243,
+          "error_ppm": -0.72
+        }
+      ],
+      "spectrum_1khz_10mhz": {
+        "clock_mhz": 250.00610375666994,
+        "rms_tie_ps": 107.45802711117074,
+        "band_tie_ps": 106.27088264854031,
+        "offset_hz": -30518.323212484123,
+        "strongest_line_dbc": -19.525594998748762,
+        "resolution_hz": 476.8488001950644
+      }
+    }
+  ]
+}

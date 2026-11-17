@@ -4,21 +4,18 @@ A proposal-stage SoC clock macro with a phase-domain all-digital loop and a tran
 
 The PLL has a coarse/fine DCO, a 40-bin phase detector, selectable tracking bandwidth, and frequency-aware acquisition. Weak fine tuning triggers a longer rail measurement. The compact Sky130 wrapper offers nominal and slow-cold phase tables and an optional narrower tracking bandwidth on the channels immediately beside integer ratios. A build-time option enables on-chip code-density calibration. Configure the reference upper bound and the coarse-code ceiling for the intended operating point. The nominal channel is 25 MHz to 256.25 MHz.
 
-![Rev. 4 tracking-replica oscillator layout](docs/rev4-dco-layout.png)
+![Routed 460 × 330 µm PLL, including the oscillator and digital controller](docs/range-pll-layout.png)
 
-The [Rev. 4 standalone build at `8a66f63`](https://github.com/jonahsaunders/VIBE_PLL/actions/runs/43496481088) passed its enabled geometry checks and full-device LVS. Its fixed-code, capacitance-extracted oscillator probes and routed timing establish this comparison baseline.
+The locally routed **460 × 330 µm** PLL passes enabled geometry DRC, full device LVS and extracted-wire TT timing. At slow-cold, the 300 MHz target falls inside two measured coarse settings with **1.68 MHz of overlap**. Characterization uses the same extracted oscillator for frequency and phase. [Measurements, replay instructions and limits](results/range-dco/README.md) · [Routed layout record](results/range-dco/routed-layout.json)
 
-The updated oscillator reaches **355.61 MHz at the slow-cold maximum code**, drawing **2.91 mW** at that setting. Its standalone flow targets **460 × 330 µm (0.1518 mm²)** and reports timing independently of geometry and LVS. See the [extracted measurements and replay instructions](results/range-dco/README.md) and [current build results](https://github.com/jonahsaunders/VIBE_PLL/actions/workflows/standalone-route.yml).
-
-| Rev. 4 measurement | Result | Design target |
+| Measurement | Rev. 4 | Updated design |
 | --- | --- | --- |
-| TT, 1.80 V, 25 °C at coarse:fine 52:64 | 98.78 MHz, 10 of 40 fine bins missing | Nominal locked channel 256.25 MHz |
-| TT at maximum code 255:128 | 294.70 MHz, 15 bins missing | Cover through 300 MHz |
-| SS, 1.62 V, 0 °C at 255:128 | 151.50 MHz, 14 bins missing | Cover 160–300 MHz |
-| Routed TT worst max/min slack | −29.06 ns / +0.12 ns | Both ≥ 0 ns |
-| Routed outline | 600 × 400 µm (0.240 mm²) | Provisional 0.100 mm² |
+| TT, 1.80 V, 25 °C at fixed 52:64 | 98.78 MHz, 30 of 40 bins occupied | 296.97 MHz, 12 of 40 bins occupied |
+| SS, 1.62 V, 0 °C at fixed 255:128 | 151.50 MHz at 1.40 mW | 355.61 MHz at 2.91 mW |
+| Routed TT worst setup / hold slack | −29.06 / +0.12 ns | +0.28 / +0.18 ns locally |
+| Routed outline | 600 × 400 µm (0.2400 mm²) | 460 × 330 µm (0.1518 mm²) |
 
-[Oscillator measurements](https://github.com/jonahsaunders/VIBE_PLL/actions/runs/43496481088/job/132130803171) · [Routed timing, geometry and connectivity](https://github.com/jonahsaunders/VIBE_PLL/actions/runs/43496481088/job/132130802878)
+The original planning allowance was 0.100 mm². The updated wrapper requires at least 0.1179 mm² at the 65% cell-packing limit before margins. The clock controller uses a 400 MHz guard and configurable coarse ceilings. The table gives fixed-code oscillator probes. Nominal lock at 256.25 MHz is measured separately in closed-loop replay. [Rev. 4 comparison build](https://github.com/jonahsaunders/VIBE_PLL/actions/runs/43496481088) · [Current workflow and measured limits](https://github.com/jonahsaunders/VIBE_PLL/actions/workflows/standalone-route.yml)
 
 - [Design, controls, and timing](docs/design.md)
 - [Chipalooza #4 proposal](docs/proposal.md)

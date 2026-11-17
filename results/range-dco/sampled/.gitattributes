@@ -1,0 +1,2 @@
+# Preserve the exact input bytes identified by each replay's source record.
+*/sweep.csv -text whitespace=trailing-space,cr-at-eol

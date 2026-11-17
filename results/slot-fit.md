@@ -1,8 +1,8 @@
 # Chipalooza #4 floorplan check
 
-This page records the original compact build. For the current layout, use
-the [physical implementation](../physical/README.md). The [rev. 3 results](rev3.md)
-record the schematic-based replays and sensitivity studies.
+The higher-drive build uses a **460 × 330 µm** standalone outline and a **298 × 123 µm** oscillator reservation including its halo. At the 65% row-usage limit its 52,789 µm² of mapped cells and oscillator reservation need at least **0.1179 mm²** before edge margins and routing. The routed outline occupies **0.1518 mm²**, 36.75% smaller than Rev. 4. Harness integration requires an allocated outline that accommodates the verified build. [Physical implementation](../physical/README.md)
+
+The following numbers describe the original compact build. The [rev. 3 results](rev3.md) record its schematic-based replays and sensitivity studies.
 
 The Challenge #4 organizer will specify the assigned outline and wrapper in the harness repository. This check uses a provisional **400 × 250 µm** rectangle based on the PLL's **0.10 mm²** planning target. It reserves a **100 × 100 µm** corner for the DCO and its guard ring, and **5 µm** per edge for wrapper access. The DCO reservation is a layout allocation. [Challenge #4 rules](https://opencircuitdesign.com/chipalooza/rules-4.html)
 

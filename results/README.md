@@ -1,5 +1,7 @@
 # Verification results
 
+The current standalone design has [capacitance-extracted transistor measurements, phase profiles and closed-loop replay instructions](range-dco/README.md). Each [standalone build](https://github.com/jonahsaunders/VIBE_PLL/actions/workflows/standalone-route.yml) publishes its routed timing, geometry, area, tuning sweeps and spectra together.
+
 The [Rev. 4 results](rev4.md) cover the tracking-replica schematic and capture checks. [Rev. 3](rev3.md) documents the previous compact build. The closed-loop and spectral tables below record the earlier self-calibrating revision. The [area page](slot-fit.md) records the first compact build and the planning methodology.
 
 ## Sky130A schematic
