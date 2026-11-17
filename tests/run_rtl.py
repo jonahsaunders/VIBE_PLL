@@ -85,9 +85,10 @@ def spice_table(source, destination, *, ideal_quarter_bins=False, lut_point=None
         points = sweeps.setdefault(fine, {})
         if coarse in points or not (0 <= coarse <= 255 and 0 <= fine <= 128):
             raise ValueError(f"Duplicate or invalid DCO code {coarse}:{fine}")
-        if int(row["bad_tap_sequences"]) or (not coarse_only and int(row["bad_fine_sequences"])):
+        has_coarse = coarse_only and all(row.get(f"bin_{i}_ui") for i in range(10))
+        if int(row["bad_tap_sequences"]) or (not has_coarse and int(row["bad_fine_sequences"])):
             raise ValueError(f"Illegal phase tap order at {coarse}:{fine}")
-        if coarse_only:
+        if has_coarse:
             widths = [width for i in range(10)
                       for width in (float(row[f"bin_{i}_ui"]), 0.0, 0.0, 0.0)]
         else:

@@ -7,6 +7,7 @@ import csv
 import hashlib
 import json
 from pathlib import Path
+import re
 import subprocess
 import sys
 import tempfile
@@ -95,18 +96,33 @@ def replay(args):
             elif source["corner"] == "ss":
                 base.append("--slow-phase-profile")
             # A separate lock/retune case also exercises loss and return of reference.
-            for label, options in [("range", ["--ref", "20", "--start", "32768", "--retune", "61440"]),
-                                   *((str(r), ["--ref", "25", "--start", str(r)])
-                                     for r in (41984, 40959, 40961))]:
+            channels = [("range" if ref == 20 else f"range-{ref}",
+                         ["--ref", str(ref), "--start", str(160 * 4096 // ref),
+                          "--retune", str(300 * 4096 // ref)]) for ref in (16, 20, 32)]
+            channels += [(str(r), ["--ref", "25", "--start", str(r)]) for r in (41984, 40959, 40961)]
+            if detector == "fine":
+                channels += [(f"narrow-{r}", ["--ref", "25", "--start", str(r), "--narrow-near-integer"])
+                             for r in (40959, 40961)]
+            for label, options in channels:
                 edge_file = Path(tmp) / "edges.csv"
                 edge_file.unlink(missing_ok=True)
-                if label != "range":
+                if not label.startswith("range"):
                     options += ["--spectrum", edge_file, "--spectrum-edges", str(args.edges)]
                 case = subprocess.run(base + options, capture_output=True, text=True)
                 name = f"{detector}-{label}"
                 (out / f"{name}.log").write_text(case.stdout + case.stderr)
                 result = {"case": name, "passed": case.returncode == 0}
-                if case.returncode == 0 and label != "range":
+                result["locks_us"] = {label: float(us) for label, us in re.findall(
+                    r"^LOCK (\S+) us=([\d.]+)", case.stdout, re.MULTILINE)}
+                result["mean_frequency"] = [
+                    {"target_mhz": float(target), "measured_mhz": float(actual), "error_ppm": float(error)}
+                    for target, actual, error in re.findall(
+                        r"^FREQ target_MHz=([\d.]+) measured_MHz=([\d.]+) error_ppm=([+-]?[\d.]+)",
+                        case.stdout, re.MULTILINE)]
+                watchdog = re.search(r"^WATCHDOG us=([\d.]+)", case.stdout, re.MULTILINE)
+                if watchdog:
+                    result["reference_loss_us"] = float(watchdog[1])
+                if case.returncode == 0 and not label.startswith("range"):
                     edges = np.loadtxt(edge_file, skiprows=1)
                     if len(edges) != args.edges:
                         raise ValueError("Incomplete edge record")

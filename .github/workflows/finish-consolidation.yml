@@ -61,6 +61,8 @@ jobs:
           cp build/evidence/route/physical-verification.json build/evidence/ci-verification.json
           gh run download "$VERIFIED_RUN_ID" --repo "$GITHUB_REPOSITORY" \
             --name sky130-rtl --dir build/evidence/rtl
+          gh run download "$VERIFIED_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+            --name pll-summary --dir build/evidence/summary
       - name: Install pinned verification inputs
         run: |
           set -euo pipefail

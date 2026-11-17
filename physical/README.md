@@ -1,7 +1,8 @@
 # Sky130 physical implementation
 
-The layout flow supports both oscillator circuits and uses the Rev. 4 tracking
-replicas by default. The 406-port interface, 255 coarse slices, 128 fine slices,
+The standalone layout flow defaults to the higher-drive ring with local tap
+buffers and tracking replicas. It also supports the original tracking and
+legacy circuits. The 406-port interface, 255 coarse slices, 128 fine slices,
 five ring taps, and fifteen isolated fine taps are retained.
 
 ![Rev. 4 tracking-replica DCO, rendered from GDS](../docs/rev4-dco-layout.png)
@@ -10,6 +11,7 @@ five ring taps, and fifteen isolated fine taps are retained.
 | --- | ---: | ---: | --- | --- |
 | Legacy | 870 | 130 × 105 µm | 0 markers | Match |
 | Tracking replicas | 1,010 | 290 × 115 µm | 0 markers | Match |
+| Higher-drive tracking replicas | 1,010 | 290 × 115 µm | 0 markers | Match |
 
 These results apply to the oscillator macros. Full-PLL results must come from
 the routed build's `physical-verification.json`; the macro results do not

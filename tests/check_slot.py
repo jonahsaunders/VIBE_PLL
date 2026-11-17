@@ -90,8 +90,11 @@ def main():
     parser.add_argument("--slot", required=True, type=float, nargs=2, metavar=("WIDTH", "HEIGHT"))
     parser.add_argument("--dco-reserve", required=True, type=float, nargs=2, metavar=("WIDTH", "HEIGHT"),
                         help="oscillator block including its halo, in micrometers")
-    parser.add_argument("--edge-reserve", required=True, type=float, metavar="UM",
-                        help="per-edge space for wrapper access and the power grid")
+    core = parser.add_mutually_exclusive_group(required=True)
+    core.add_argument("--edge-reserve", type=float, metavar="UM",
+                      help="per-edge space for wrapper access and the power grid")
+    core.add_argument("--core-size", type=float, nargs=2, metavar=("WIDTH", "HEIGHT"),
+                      help="placement core dimensions when the routed outline has asymmetric margins")
     parser.add_argument("--utilization", required=True, type=float,
                         help="maximum standard-cell utilization of remaining rows")
     parser.add_argument("--on-chip-cal", action="store_true", help="include the calibration histogram")
@@ -105,14 +108,18 @@ def main():
     args = parser.parse_args()
     positive_pair(parser, "--slot", args.slot)
     positive_pair(parser, "--dco-reserve", args.dco_reserve)
-    if not math.isfinite(args.edge_reserve) or args.edge_reserve < 0:
+    if args.core_size:
+        positive_pair(parser, "--core-size", args.core_size)
+        if any(core > die for core, die in zip(args.core_size, args.slot)):
+            parser.error("placement core exceeds the die dimensions")
+    elif not math.isfinite(args.edge_reserve) or args.edge_reserve < 0:
         parser.error("--edge-reserve must be finite and nonnegative")
     if not 0 < args.utilization <= 1:
         parser.error("--utilization must be a fraction in (0, 1]")
     if not 16 <= args.max_coarse_code <= 255:
         parser.error("--max-coarse-code must be in 16..255")
 
-    inner_width, inner_height = (x - 2 * args.edge_reserve for x in args.slot)
+    inner_width, inner_height = args.core_size or [x - 2 * args.edge_reserve for x in args.slot]
     dco_width, dco_height = args.dco_reserve
     sites = math.floor(inner_width / SITE_WIDTH + 1e-8)
     rows = math.floor(inner_height / ROW_HEIGHT + 1e-8)
@@ -144,6 +151,7 @@ def main():
     if args.report:
         args.report.write_text(json.dumps({
             "die_um": args.slot, "die_mm2": math.prod(args.slot) / 1e6,
+            "core_um": [inner_width, inner_height],
             "dco_reserve_um": args.dco_reserve, "utilization_limit": args.utilization,
             "mapped_cell_area_um2": occupied * site_area,
             "available_row_area_um2": available * site_area,

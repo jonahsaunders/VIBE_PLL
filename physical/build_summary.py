@@ -53,7 +53,23 @@ def main():
                   "| --- | --- | --- |"])
     for corner, result in replays.items():
         sampled = status({"passed": result.get("sampled_pass")})
-        lines.append(f"| {corner.upper()} | {sampled} | {status(result)} |")
+        bounds = result.get("coverage", {})
+        if not result:
+            continuous = "unavailable"
+        elif not bounds.get("brackets_target") or bounds.get("gaps_mhz"):
+            continuous = "measured range gap"
+        elif bounds.get("unmeasured_intervals"):
+            continuous = "unverified between samples"
+        else:
+            continuous = "covered by measured rails"
+        lines.append(f"| {corner.upper()} | {sampled} | {continuous} |")
+    lines.extend(["", "| Corner | Case | 1 kHz–10 MHz TIE (ps RMS) | Strongest line (dBc) |",
+                  "| --- | --- | ---: | ---: |"])
+    for corner, result in replays.items():
+        for case in result.get("cases", []):
+            if spec := case.get("spectrum_1khz_10mhz"):
+                lines.append(f"| {corner.upper()} | {case['case']} | {spec['band_tie_ps']:.2f} "
+                             f"| {spec['strongest_line_dbc']:.2f} |")
     (a.output / "summary.md").write_text("\n".join(lines) + "\n")
 
 

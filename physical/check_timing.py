@@ -15,9 +15,26 @@ def evaluate(log, extracted):
         matches = re.findall(r"^" + label + r"\s+(\S+)\s*$", log, re.MULTILINE)
         numbers[key] = float(matches[-1]) if matches else None
     warnings = [line for line in log.splitlines() if re.search(r"\[WARNING STA-(1648|1650)\]", line)]
-    passed = (extracted and not warnings and
+    # OpenSTA may warn about -from on a black-box pin. Verify every actual
+    # routed capture report contains its constrained path and achieved slack.
+    expected = {f"controller.sampler.{name}[{i}]" for name, count in
+                (("neg_meta", 12), ("pos_meta", 12), ("tap_meta", 5), ("fine_meta", 15))
+                for i in range(count)}
+    capture = {}
+    routed = log.partition("Loaded routed SPEF")[2]
+    for name, section in re.findall(r"^(?:Gray|Phase) capture (\S+)\n(.*?)(?=^(?:Gray|Phase) capture |\Z)",
+                                    routed, re.MULTILINE | re.DOTALL):
+        slack = re.findall(r"^\s*([-+.\d]+)\s+slack \((?:MET|VIOLATED)\)", section, re.MULTILINE)
+        if ("Path Group: path delay" in section and
+                re.search(r"^\s+1\.0+\s+1\.0+\s+max_delay\s*$", section, re.MULTILINE) and slack):
+            capture[name] = min(map(float, slack))
+    missing = sorted(expected - capture.keys())
+    minimum = min(capture.values(), default=None)
+    passed = (extracted and not warnings and not missing and minimum is not None and minimum >= 0 and
               all(v is not None and math.isfinite(v) and v >= 0 for v in numbers.values()))
     return {"passed": passed, "routed_spef_loaded": extracted, **numbers,
+            "capture_endpoints_checked": len(capture), "missing_capture_endpoints": missing,
+            "minimum_capture_slack_ns": minimum,
             "unresolved_spef_names": len(warnings), "annotation_warnings": warnings}
 
 

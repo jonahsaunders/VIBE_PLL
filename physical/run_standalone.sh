@@ -50,12 +50,18 @@ esac
 "$python" "$root/spice/dco_deck.py" "${replica_args[@]}" --emit "$build/dco-source.spice"
 "$python" "$root/physical/layout_dco.py" --schematic "$build/dco-source.spice" --output "$build"
 "$python" "$root/physical/check_dco.py" --klayout "$klayout" --pdk "$SKY130A" --build "$build"
-read -r die_width die_height < <("$python" -c \
-    'import os; a=list(map(float,os.environ["DIE_AREA"].split())); print(a[2]-a[0],a[3]-a[1])')
+read -r dl db dr dt <<< "$DIE_AREA"
+read -r cl cb cr ct <<< "$CORE_AREA"
+read -r die_width die_height core_width core_height < <("$python" -c '
+import sys
+dl, db, dr, dt, cl, cb, cr, ct = map(float, sys.argv[1:])
+if not (dl <= cl < cr <= dr and db <= cb < ct <= dt):
+    raise SystemExit("Placement core must be inside the die")
+print(dr - dl, dt - db, cr - cl, ct - cb)' "$dl" "$db" "$dr" "$dt" "$cl" "$cb" "$cr" "$ct")
 read -r reserve_width reserve_height <<< "$DCO_RESERVE"
 "$python" "$root/tests/check_slot.py" --liberty "$LIBERTY" --lef "$CELLS_LEF" \
     --slot "$die_width" "$die_height" --dco-reserve "$reserve_width" "$reserve_height" \
-    --edge-reserve 5 --utilization 0.65 "${map_args[@]}" \
+    --core-size "$core_width" "$core_height" --utilization 0.65 "${map_args[@]}" \
     --report "$build/area.json" --mapped-netlist "$MAPPED_VERILOG" | tee "$build/area.log"
 route_status=0
 "$openroad" -threads 4 -exit "$root/physical/floorplan.tcl" 2>&1 | tee "$build/openroad.log" || route_status=$?
