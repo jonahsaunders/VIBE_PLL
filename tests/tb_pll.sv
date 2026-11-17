@@ -4,7 +4,8 @@
 module tb_pll #(
     parameter ON_CHIP_CAL = 1'b1,
     parameter TRACKING_REPLICAS = 1'b0,
-    parameter [7:0] MAX_COARSE_CODE = 8'd255
+    parameter [7:0] MAX_COARSE_CODE = 8'd255,
+    parameter RANGE_DCO = 1'b0
 );
     reg ref_clk = 0, ref_running = 1;
     reg reset_n = 1, enable = 0, cfg_toggle = 0;
@@ -20,7 +21,7 @@ module tb_pll #(
     wire [11:0] status;
 
     cpz4_pll #(.ON_CHIP_CAL(ON_CHIP_CAL), .TRACKING_REPLICAS(TRACKING_REPLICAS),
-              .MAX_COARSE_CODE(MAX_COARSE_CODE))
+              .MAX_COARSE_CODE(MAX_COARSE_CODE), .RANGE_DCO(RANGE_DCO))
         dut(ref_clk, reset_n, enable, cfg_toggle, cfg_addr, cfg_data, taps, fine_ring,
                  dco_enable, therm, fine_therm, clk_out, clk_mon, status);
 
@@ -265,6 +266,7 @@ module tb_pll #(
     real started, lost_us, hold_start, last_edge_ps, edge_mhz;
     integer initial_ratio, retune_ratio, value_unused, ref_bound, requested_gear, expected_calibration;
     integer expected_tracking_replicas;
+    integer expected_range_dco;
     integer spectrum_edges, spectrum_settle;
     reg [16:0] auto_mode;
     integer cal_code, test_ceiling;
@@ -293,6 +295,8 @@ module tb_pll #(
             expected_tracking_replicas != int'(TRACKING_REPLICAS))
             $fatal(1, "The testbench was compiled for a different phase detector");
         value_unused = $value$plusargs("startup_delay_ps=%f", startup_delay_ps);
+        if ($value$plusargs("expected_range_dco=%d", expected_range_dco) &&
+            expected_range_dco != int'(RANGE_DCO)) $fatal(1, "Wrong range-DCO build");
         value_unused = $value$plusargs("start_n=%d", initial_ratio);
         value_unused = $value$plusargs("retune_n=%d", retune_ratio);
         auto_mode = 0;

@@ -32,7 +32,8 @@ def lef_cells(path):
     return cells
 
 
-def map_cells(yosys, liberty, on_chip_cal, mapped_netlist=None, max_coarse_code=255, tracking_replicas=False):
+def map_cells(yosys, liberty, on_chip_cal, mapped_netlist=None, max_coarse_code=255,
+              tracking_replicas=False, range_dco=False):
     executable = shutil.which(yosys)
     if executable is None:
         raise FileNotFoundError(f"Cannot find Yosys executable: {yosys}")
@@ -46,7 +47,7 @@ def map_cells(yosys, liberty, on_chip_cal, mapped_netlist=None, max_coarse_code=
         script = [
             "read_verilog -sv " + " ".join(path.name for path in rtl),
             f"chparam -set ON_CHIP_CAL {int(on_chip_cal)} -set MAX_COARSE_CODE {max_coarse_code} "
-            f"-set TRACKING_REPLICAS {int(tracking_replicas)} {TOP}",
+            f"-set TRACKING_REPLICAS {int(tracking_replicas)} -set RANGE_DCO {int(range_dco)} {TOP}",
             f"synth -top {TOP} -flatten -noabc",
             "dfflibmap -liberty cells.lib",
             "abc -liberty cells.lib -dont_use sky130_fd_sc_hd__lpflow* -dont_use sky130_fd_sc_hd__probe*",
@@ -99,6 +100,7 @@ def main():
     parser.add_argument("--tracking-replicas", action="store_true",
                         help="select the phase tables for the DCO-biased replica netlist")
     parser.add_argument("--mapped-netlist", type=Path, help="export mapped Verilog for physical design")
+    parser.add_argument("--range-dco", action="store_true", help="map the extracted phase-center tables")
     parser.add_argument("--report", type=Path, help="write the floorplan estimate as JSON")
     args = parser.parse_args()
     positive_pair(parser, "--slot", args.slot)
@@ -120,7 +122,7 @@ def main():
         parser.error("DCO reservation extends outside the grid-aligned core")
 
     mapped = map_cells(args.yosys, args.liberty, args.on_chip_cal, args.mapped_netlist,
-                       args.max_coarse_code, args.tracking_replicas)
+                       args.max_coarse_code, args.tracking_replicas, args.range_dco)
     if mapped.pop(BLOCK, 0) != 1:
         parser.error("expected one DCO hard-macro instance")
     cells = lef_cells(args.lef)

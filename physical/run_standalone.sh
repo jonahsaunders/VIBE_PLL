@@ -38,7 +38,7 @@ case "$TRACKING_REPLICAS" in
     *) echo "TRACKING_REPLICAS must be 0 or 1" >&2; exit 2 ;;
 esac
 case "${RANGE_DCO:-$TRACKING_REPLICAS}" in
-    1) replica_args+=(--range-dco) ;;
+    1) replica_args+=(--range-dco); map_args+=(--range-dco) ;;
     0) ;;
     *) echo "RANGE_DCO must be 0 or 1" >&2; exit 2 ;;
 esac

@@ -51,7 +51,7 @@ export SKY130A="$PDK_ROOT/sky130A"
 bash physical/run_standalone.sh build/standalone
 ```
 
-The integration floorplan is **600 × 400 µm**, with a 5 µm edge margin and a
+The range-DCO integration floorplan is **460 × 330 µm**, with a 5 µm edge margin and a
 298 × 123 µm tracking-DCO reservation, including its 4 µm halo. This is larger
 than the historical 400 × 250 µm planning target and is not a claim that the
 Rev. 4 layout fits that original slot. Approved harness dimensions still
@@ -78,13 +78,20 @@ and does not truncate routing to one iteration.
 | Setting | Default | Purpose |
 | --- | --- | --- |
 | `TRACKING_REPLICAS` | `1` | Select the matching circuit and phase-center tables; `0` retains legacy support |
+| `RANGE_DCO` | Same as `TRACKING_REPLICAS` | Select the higher-drive ring, local tap buffers and extracted TT/SS tables. Set to zero to reproduce the earlier tracking circuit. |
 | `ON_CHIP_CAL` | `0` | Set to `1` to retain histogram calibration in the mapped controller |
 | `MAX_COARSE_CODE` | `255` | Hard coarse-code ceiling; lower to the validated operating limit |
-| `PLACE_DENSITY` | `0.50` | Placement density |
+| `PLACE_DENSITY` | `0.62` | Placement density |
 | `DIE_AREA`, `CORE_AREA` | Above | Override together for the allocated outline |
 | `DCO_RESERVE`, `DCO_HALO_UM` | Above | Must contain the actual macro and its halo |
 
 Re-run the area and physical checks for each build-time configuration.
+The route emits `area.json`, `physical-verification.json`, and a separate
+`timing-verification.json` from the CI timing check. The physically checked
+Rev. 4 baseline used 600 × 400 µm. Its measured cell area and DCO reservation
+require at least 0.117 mm² at the project's 65% packing cap, before margins.
+Use the allocated harness outline for the integration build. See the
+[range-DCO measurements and replay commands](../results/range-dco/README.md).
 The filtered-bias circuit remains an explicit schematic experiment; the
 tracking layout described here uses the unfiltered tracking schematic.
 

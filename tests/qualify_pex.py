@@ -27,7 +27,7 @@ def characterize(args):
     record.unlink(missing_ok=True)
     (out / "qualification.json").unlink(missing_ok=True)
     vdd, temp = CORNERS[args.corner]
-    codes = sorted(set(range(0, args.ceiling + 1, args.stride)) | {args.ceiling})
+    codes = sorted(set(range(0, args.ceiling + 1, args.stride)) | set(args.extra_codes) | {args.ceiling})
     with tempfile.TemporaryDirectory(dir=out) as tmp:
         def probe(code):
             path = Path(tmp) / f"{code}.csv"
@@ -59,11 +59,11 @@ def coverage(rows):
     codes = sorted(rails)
     holes, unmeasured = [], []
     for a, b in zip(codes, codes[1:]):
-        if rails[b][0] < 160 or rails[a][128] > 300:
+        if rails[b][128] < 160 or rails[a][0] > 300:
             continue
         if b != a + 1:
             unmeasured.append([a, b])
-        elif rails[b][0] > rails[a][128]:
+        elif max(160, rails[a][128]) < min(300, rails[b][0]):
             holes.append([a, b, rails[b][0] - rails[a][128]])
     low, high = rails[codes[0]][0], rails[codes[-1]][128]
     return {"low_mhz": low, "high_mhz": high, "brackets_target": low <= 160 and high >= 300,
@@ -89,7 +89,7 @@ def replay(args):
     with tempfile.TemporaryDirectory(dir=out) as tmp:
         for detector in ("fine", "coarse"):
             base = [sys.executable, ROOT / "tests/run_rtl.py", "--spice-data", table,
-                    "--fixed-centers", "--tracking-replicas"]
+                    "--fixed-centers", "--tracking-replicas", "--range-dco"]
             if detector == "coarse":
                 base.append("--coarse-phase")
             elif source["corner"] == "ss":
@@ -113,11 +113,12 @@ def replay(args):
                     result["spectrum_1khz_10mhz"] = estimate(edges, 1000, 10e6)
                 cases.append(result)
                 print(name, result, flush=True)
-    passed = (bounds["brackets_target"] and not bounds["gaps_mhz"]
-              and not bounds["unmeasured_intervals"] and all(c["passed"] for c in cases))
-    result_path.write_text(json.dumps({"passed": passed, "source": source, "coverage": bounds,
+    sampled_pass = bounds["brackets_target"] and not bounds["gaps_mhz"] and all(c["passed"] for c in cases)
+    passed = sampled_pass and not bounds["unmeasured_intervals"]
+    result_path.write_text(json.dumps({"passed": passed, "sampled_pass": sampled_pass,
+                                      "source": source, "coverage": bounds,
                                       "cases": cases}, indent=2) + "\n")
-    return 0 if passed else 1
+    return 0 if (sampled_pass if args.sampled else passed) else 1
 
 
 def main():
@@ -129,6 +130,8 @@ def main():
     sweep.add_argument("--corner", choices=CORNERS, required=True)
     sweep.add_argument("--ceiling", type=int, required=True)
     sweep.add_argument("--stride", type=int, default=1)
+    sweep.add_argument("--extra-codes", type=int, nargs="*", default=[],
+                       help="also measure these codes, e.g. adjacent settings around the nominal channel")
     sweep.add_argument("--jobs", type=int, default=1)
     sweep.add_argument("--settle-ns", type=float, default=900)
     sweep.add_argument("--timeout", type=int, default=1200)
@@ -136,9 +139,11 @@ def main():
     check = subs.add_parser("replay")
     check.add_argument("--output", required=True, type=Path)
     check.add_argument("--edges", type=int, default=524288)
+    check.add_argument("--sampled", action="store_true", help="check sampled channels without requiring every code")
     args = p.parse_args()
     if args.command == "sweep":
-        if not (16 <= args.ceiling <= 255 and 1 <= args.stride <= args.ceiling and args.jobs > 0):
+        if not (16 <= args.ceiling <= 255 and 1 <= args.stride <= args.ceiling and args.jobs > 0 and
+                all(0 <= c <= args.ceiling for c in args.extra_codes)):
             p.error("Invalid ceiling, stride, or job count")
         return characterize(args)
     if args.edges < 2:

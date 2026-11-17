@@ -24,7 +24,8 @@ def ring_loads(path):
                 m = re.fullmatch(r"([\d.+eE-]+)([pfa]?)", r[3], re.I)
                 if not m:
                     raise ValueError(f"Unknown capacitance {r[3]}")
-                loads[net][other not in ("0", "vss", "vdd")] += float(m[1]) * scales[m[2].lower()]
+                index = 0 if other in ("0", "vss", "vdd") else 1
+                loads[net][index] += float(m[1]) * scales[m[2].lower()]
     return sorted(((n, *v, sum(v)) for n, v in loads.items()), key=lambda row: -row[3])
 
 

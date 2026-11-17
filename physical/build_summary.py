@@ -29,7 +29,9 @@ def main():
             with path.open(newline="") as f:
                 probes.extend(csv.DictReader(f))
     a.output.mkdir(parents=True, exist_ok=True)
-    data = {"commit": a.commit, "area": area, "physical": geometry, "timing": timing, "probes": probes}
+    replays = {c: load(a.artifacts / f"replay-{c}" / "qualification.json") for c in ("tt", "ss", "ff")}
+    data = {"commit": a.commit, "area": area, "physical": geometry, "timing": timing,
+            "probes": probes, "extracted_replays": replays}
     (a.output / "summary.json").write_text(json.dumps(data, indent=2) + "\n")
     def status(record):
         return {True: "pass", False: "fail", None: "unavailable"}[record.get("passed")]
@@ -47,6 +49,11 @@ def main():
                      f"| {r['bad_tap_sequences']} / {r['bad_fine_sequences']} |")
     if len(probes) != 3:
         lines.append("\nEndpoint characterization is incomplete.")
+    lines.extend(["", "| Extracted corner | Sampled replays | Continuous range |",
+                  "| --- | --- | --- |"])
+    for corner, result in replays.items():
+        sampled = status({"passed": result.get("sampled_pass")})
+        lines.append(f"| {corner.upper()} | {sampled} | {status(result)} |")
     (a.output / "summary.md").write_text("\n".join(lines) + "\n")
 
 

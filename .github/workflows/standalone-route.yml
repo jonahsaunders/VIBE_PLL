@@ -182,8 +182,52 @@ jobs:
           path: build/standalone
           if-no-files-found: warn
 
+  extracted-replay:
+    needs: oscillator
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {corner: tt, ceiling: 96, stride: 24, extra: '52 53 57 58'}
+          - {corner: ss, ceiling: 255, stride: 48, extra: '239 240 254'}
+          - {corner: ff, ceiling: 64, stride: 16, extra: '31 33'}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Install the simulator and matching device models
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq iverilog ngspice python3-numpy zstd
+          release=https://github.com/chipfoundry/volare/releases/download/sky130-fa87f8f4bbcc7255b6f0c0fb506960f531ae2392
+          mkdir -p build/pdk
+          for asset in common sky130_fd_pr; do
+            curl -fsSL --retry 3 "$release/$asset.tar.zst" | tar --zstd -x -C build/pdk
+          done
+      - name: Download this build's oscillator extraction
+        run: gh run download "$GITHUB_RUN_ID" --name sky130-oscillator --dir build/oscillator
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - name: Measure tuning and tap phase
+        env:
+          OMP_NUM_THREADS: '1'
+        run: |
+          python3 tests/qualify_pex.py sweep --corner ${{ matrix.corner }} --ceiling ${{ matrix.ceiling }} \
+            --stride ${{ matrix.stride }} --extra-codes ${{ matrix.extra }} --jobs 2 \
+            --netlist build/oscillator/cpz4_dco_pex.spice --output build/replay \
+            --lib build/pdk/sky130A/libs.tech/ngspice/sky130.lib.spice
+      - name: Check lock, dropout, recovery, and both detectors
+        run: /usr/bin/python3 tests/qualify_pex.py replay --sampled --output build/replay
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: replay-${{ matrix.corner }}
+          path: build/replay
+
   qualification:
-    needs: [rtl, oscillator, route]
+    needs: [rtl, oscillator, route, extracted-replay]
     if: always() && needs.route.result != 'skipped'
     runs-on: ubuntu-24.04
     steps:
@@ -207,13 +251,14 @@ jobs:
           RTL: ${{ needs.rtl.result }}
           OSC: ${{ needs.oscillator.result }}
           ROUTE: ${{ needs.route.result }}
+          REPLAY: ${{ needs.extracted-replay.result }}
         run: |
           python3 - <<'PY'
           import json, os
           from pathlib import Path
           data = json.loads(Path("build/summary/summary.json").read_text())
           upper = {r["corner"]: r for r in data["probes"] if (r["code"], r["fine_code"]) == ("255", "128")}
-          passed = (all(os.environ[k] == "success" for k in ("RTL", "OSC", "ROUTE"))
+          passed = (all(os.environ[k] == "success" for k in ("RTL", "OSC", "ROUTE", "REPLAY"))
                     and data["physical"].get("passed") and data["timing"].get("passed")
                     and set(upper) == {"tt", "ss"}
                     and all(float(r["frequency_mhz"]) >= 300 and int(r["bad_tap_sequences"]) == 0

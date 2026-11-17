@@ -76,7 +76,7 @@ def budget(mode, gain_ratio, reference_hz, output_hz, bins=40, tracking_gear=2):
     phase_at_unity = phase[cross - 1] + frac * (phase[cross] - phase[cross - 1])
     noise_bw = reference_hz * np.trapezoid(abs(loop / (1 + loop))**2, f)
     rms = 1 / (bins * output_hz * math.sqrt(12)) * math.sqrt(2 * noise_bw / reference_hz)
-    poles = np.roots([1, -2, 1, 0, a + b, -a])
+    poles = np.roots([1, -2, 1, 0, 0, a + b, -a])
     return {
         "a": a, "b": b, "unity_hz": unity * reference_hz,
         "phase_margin_deg": 180 + math.degrees(phase_at_unity),

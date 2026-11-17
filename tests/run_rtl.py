@@ -163,6 +163,7 @@ def main():
     parser.add_argument("--slow-phase-profile", action="store_true", help="use the slow-cold fixed table")
     parser.add_argument("--tracking-replicas", action="store_true",
                         help="use the tracking-replica fixed tables with a matching SPICE sweep")
+    parser.add_argument("--range-dco", action="store_true", help="use the range-DCO extracted phase tables")
     parser.add_argument("--phase-lut-point", type=int, nargs=2, metavar=("COARSE", "FINE"),
                         help="derive the fixed replay LUT from this measured sweep point")
     phase_group = parser.add_mutually_exclusive_group()
@@ -176,6 +177,8 @@ def main():
     parser.add_argument("--startup-delay-ps", type=float, default=173.209,
                         help="initial oscillator phase offset in the behavioral plant")
     args = parser.parse_args()
+    if args.range_dco and not args.tracking_replicas:
+        parser.error("--range-dco requires --tracking-replicas")
     if args.fixed_centers and args.calibrate:
         parser.error("--calibrate requires on-chip calibration")
     if args.corner_grid and (not args.fixed_centers or args.spice_data or args.spectrum):
@@ -204,12 +207,13 @@ def main():
         common = [args.iverilog, "-g2012", "-Wall", "-Wno-timescale"]
         parameter = int(not args.fixed_centers)
         replicas = int(args.tracking_replicas)
+        range_dco = int(args.range_dco)
         if compiled is None:
             subprocess.run([*common, "-s", "cpz4_sky130", f"-Pcpz4_sky130.ON_CHIP_CAL={parameter}",
-                            f"-Pcpz4_sky130.TRACKING_REPLICAS={replicas}",
+                            f"-Pcpz4_sky130.TRACKING_REPLICAS={replicas}", f"-Pcpz4_sky130.RANGE_DCO={range_dco}",
                             "-t", "null", *RTL], check=True)
             subprocess.run([*common, "-s", "tb_pll", f"-Ptb_pll.ON_CHIP_CAL={parameter}",
-                            f"-Ptb_pll.TRACKING_REPLICAS={replicas}",
+                            f"-Ptb_pll.TRACKING_REPLICAS={replicas}", f"-Ptb_pll.RANGE_DCO={range_dco}",
                             "-o", output, *RTL, ROOT / "tests" / "tb_pll.sv"], check=True)
         if not args.spice_data and not args.spectrum and not args.corner_grid and compiled is None:
             for top, module in (("tb_edge_counter", "phase_sampler.sv"),
@@ -261,7 +265,8 @@ def main():
         for label, options in scenarios.items():
             print(f"CASE {label}", flush=True)
             command = [args.vvp, output, *options, f"+startup_delay_ps={args.startup_delay_ps}",
-                       f"+expected_calibration={parameter}", f"+expected_tracking_replicas={replicas}"]
+                       f"+expected_calibration={parameter}", f"+expected_tracking_replicas={replicas}",
+                       f"+expected_range_dco={range_dco}"]
             if args.tracking_gear is not None:
                 command.append(f"+tracking_gear={args.tracking_gear}")
             if args.calibrate:

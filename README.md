@@ -8,6 +8,8 @@ The PLL has a coarse/fine DCO, a 40-bin phase detector, selectable tracking band
 
 The [Rev. 4 standalone build at `8a66f63`](https://github.com/jonahsaunders/VIBE_PLL/actions/runs/43496481088) passed its enabled geometry checks and full-device LVS. Its fixed-code, capacitance-extracted oscillator probes and routed timing establish this comparison baseline.
 
+The updated oscillator reaches **309.96 MHz at the slow-cold maximum code**. Its standalone flow targets **460 × 330 µm (0.1518 mm²)** and reports timing independently of geometry and LVS. See the [extracted measurements and replay instructions](results/range-dco/README.md) and [current build results](https://github.com/jonahsaunders/VIBE_PLL/actions/workflows/standalone-route.yml).
+
 | Rev. 4 measurement | Result | Design target |
 | --- | --- | --- |
 | TT, 1.80 V, 25 °C at coarse:fine 52:64 | 98.78 MHz, 10 of 40 fine bins missing | Nominal locked channel 256.25 MHz |

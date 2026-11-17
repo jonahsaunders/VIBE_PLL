@@ -16,6 +16,7 @@ read_lef $::env(DCO_LEF)
 read_liberty $::env(LIBERTY)
 read_verilog $::env(MAPPED_VERILOG)
 link_design cpz4_sky130
+set_dont_use {sky130_fd_sc_hd__probe* sky130_fd_sc_hd__lpflow*}
 
 # The row-packing model uses 400 x 250 um and a 5 um edge reservation.
 # Set these coordinates to the allocated wrapper dimensions for integration.
@@ -126,8 +127,8 @@ if {$detailed || $global_only} {
         set_propagated_clock [all_clocks]
         estimate_parasitics -placement
         repair_design
-        repair_timing -setup
-        repair_timing -hold
+        repair_timing -setup -setup_margin 1.0
+        repair_timing -hold -hold_margin 0.10
         detailed_placement
     }
     write_def [file join $out before-route.def]
