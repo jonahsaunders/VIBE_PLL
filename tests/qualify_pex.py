@@ -52,11 +52,10 @@ def characterize(args):
     with tempfile.TemporaryDirectory(dir=out) as tmp:
         def probe(code):
             path = Path(tmp) / f"{code}.csv"
-            settle_ns = max(args.zero_settle_ns, args.settle_ns) if code == 0 else args.settle_ns
             subprocess.run([sys.executable, ROOT / "spice/dco_deck.py", "--lib", args.lib,
                             "--netlist", args.netlist, "--corner", args.corner, "--vdd", str(vdd),
                             "--temp", str(temp), "--codes", str(code), "--fine-codes", "0,64,128",
-                            "--measure-decoder", "--settle-ns", str(settle_ns), "--timeout", str(args.timeout),
+                            "--measure-decoder", "--settle-ns", str(args.settle_ns), "--timeout", str(args.timeout),
                             "--output", path], check=True)
             with path.open(newline="") as f:
                 return list(csv.DictReader(f))
@@ -64,7 +63,6 @@ def characterize(args):
             rows = [row for group in pool.map(probe, codes) for row in group]
     save_sweep(out, rows, {"corner": args.corner, "vdd": vdd, "temp_c": temp, "coarse_codes": codes,
                            "requested_codes": requested, "fine_codes": [0, 64, 128], "settle_ns": args.settle_ns,
-                           "zero_settle_ns": max(args.settle_ns, args.zero_settle_ns),
                            "netlist_sha256": digest(args.netlist), "model_library_sha256": digest(args.lib),
                            "characterizer_sha256": digest(ROOT / "spice/dco_deck.py")})
 
@@ -101,8 +99,13 @@ def coverage(rows):
     for r in rows:
         rails.setdefault(int(r["code"]), {})[int(r["fine_code"])] = float(r["frequency_mhz"])
     codes = sorted(rails)
-    holes, unmeasured = [], []
+    holes, unmeasured, upper_overlaps = [], [], []
     for a, b in zip(codes, codes[1:]):
+        low = max(rails[a][0], rails[b][0])
+        high = min(rails[a][128], rails[b][128])
+        if b == a + 1 and low <= 300 <= high and high > low:
+            upper_overlaps.append({"codes": [a, b], "low_mhz": low, "high_mhz": high,
+                                   "width_mhz": round(high - low, 4)})
         if rails[b][128] < 160 or rails[a][0] > 300:
             continue
         if b != a + 1:
@@ -125,7 +128,7 @@ def coverage(rows):
             "within_400mhz_guard": max(freq for fine in rails.values() for freq in fine.values()) <= 400,
             "max_measured_fallback_ui": max((float(r["coarse_fallback_ui"]) for r in rows
                                              if r.get("coarse_fallback_ui")), default=None),
-            "unmeasured_intervals": unmeasured, "gaps_mhz": holes,
+            "unmeasured_intervals": unmeasured, "gaps_mhz": holes, "overlaps_at_300_mhz": upper_overlaps,
             "uncovered_by_measured_rails_mhz": uncovered}
 
 
@@ -214,9 +217,8 @@ def main():
     sweep.add_argument("--jobs", type=int, default=1)
     sweep.add_argument("--partition", nargs=2, type=int, default=(0, 1), metavar=("INDEX", "COUNT"),
                        help="measure a disjoint subset for parallel runners, indexed from zero")
-    sweep.add_argument("--settle-ns", type=float, default=200, help="static settling window before measuring")
-    sweep.add_argument("--zero-settle-ns", type=float, default=900,
-                       help="minimum settling time at coarse zero, where oscillator startup is slower")
+    sweep.add_argument("--settle-ns", type=float, default=900,
+                       help="static settling time for all measured tuning rails")
     sweep.add_argument("--timeout", type=int, default=1200)
     sweep.add_argument("--output", required=True, type=Path)
     union = subs.add_parser("combine", help="verify and join partitions of the same extracted sweep")

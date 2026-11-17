@@ -6,7 +6,7 @@ The PLL has a coarse/fine DCO, a 40-bin phase detector, selectable tracking band
 
 ![Routed 460 × 330 µm PLL, including the oscillator and digital controller](docs/range-pll-layout.png)
 
-The locally routed **460 × 330 µm** PLL passes enabled geometry DRC, full device LVS and extracted-wire TT timing. At slow-cold, the 300 MHz target falls inside two measured coarse settings with **1.68 MHz of overlap**. Characterization uses the same extracted oscillator for frequency and phase. [Measurements, replay instructions and limits](results/range-dco/README.md) · [Routed layout record](results/range-dco/routed-layout.json)
+The locally routed **460 × 330 µm** PLL passes enabled geometry DRC, full device LVS and extracted-wire TT timing. At slow-cold, the 300 MHz target falls inside two measured coarse settings with **2.99 MHz of overlap** after 900 ns of settling. Characterization uses the same extracted oscillator for frequency and phase. [Measurements, replay instructions and limits](results/range-dco/README.md) · [Routed layout record](results/range-dco/routed-layout.json)
 
 | Measurement | Rev. 4 | Updated design |
 | --- | --- | --- |

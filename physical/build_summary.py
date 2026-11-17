@@ -71,6 +71,11 @@ def main():
         else:
             continuous = "covered by measured rails"
         lines.append(f"| {corner.upper()} | {sampled} | {continuous} |")
+    for pair in replays["ss"].get("coverage", {}).get("overlaps_at_300_mhz", []):
+        a, b = pair["codes"]
+        lines.append(f"\nSlow-cold coarse settings {a} and {b} overlap across 300 MHz "
+                     f"from {pair['low_mhz']:.4f} to {pair['high_mhz']:.4f} MHz "
+                     f"({pair['width_mhz']:.4f} MHz).")
     lines.extend(["", "| Corner | Case | 1 kHz–10 MHz TIE (ps RMS) | Strongest line (dBc) |",
                   "| --- | --- | ---: | ---: |"])
     for corner, result in replays.items():

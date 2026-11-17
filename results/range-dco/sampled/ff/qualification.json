@@ -37,6 +37,7 @@
       ]
     ],
     "gaps_mhz": [],
+    "overlaps_at_300_mhz": [],
     "uncovered_by_measured_rails_mhz": []
   },
   "cases": [

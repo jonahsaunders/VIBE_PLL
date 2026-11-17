@@ -15,7 +15,9 @@ At the same slow-cold maximum code, Rev. 4 measured 151.50 MHz at 1.40 mW. The f
 
 ## Tuning and physical closure
 
-In the 280 ns slow-cold transient, coarse 159 spans **298.8879–301.3755 MHz** from fine zero to fine 128. The next coarse setting starts at 299.6972 MHz, giving the two measured ranges **1.6783 MHz of overlap** across 300 MHz. At the same external loads, supply, temperature and control codes, the schematic/extracted measurements are 743.1583/355.6133 MHz at slow-cold 255:128 and 718.5245/296.9738 MHz at typical 52:64. The extraction includes both ground and interconnect coupling capacitance.
+After 900 ns of slow-cold settling, coarse 158 spans **298.4383–302.2498 MHz** and coarse 159 spans **299.2621–302.9997 MHz**. Their fine tuning ranges overlap across 300 MHz by **2.9877 MHz**. Coarse 160 starts at 300.0666 MHz. The period spread over the measured cycles was at most 0.002% on these six rails. The shorter 280 ns transient placed the 300 MHz overlap one code higher. [Settled rail measurements](settled-ss-upper-rails.csv)
+
+At the same external loads, supply, temperature and control codes, the schematic/extracted measurements are 743.1583/355.6133 MHz at slow-cold 255:128 and 718.5245/296.9738 MHz at typical 52:64. The extraction includes both ground and interconnect coupling capacitance. [Schematic SS](schematic-ss-255-128.csv) · [Schematic TT](schematic-tt-52-64.csv)
 
 The oscillator can exceed the digital clock limit when driven directly. At TT, 255:128 reached 687.4394 MHz. At FF, 48:128 reached 438.5375 MHz. The routed clocks are timed to the controller's 400 MHz acquisition guard. Configure the reference upper bound and coarse ceiling for the intended operating condition before enabling manual tuning. The characterized replay ceilings are 64 at TT, 192 at SS and 24 at FF. Their upper fine rails measured 339.4370, 323.7114 and 333.2631 MHz respectively.
 
@@ -23,7 +25,7 @@ The locally routed 460 × 330 µm layout passed the enabled geometry checks and 
 
 ## Closed-loop measurements
 
-All 42 cases in the checked-in sampled sweeps passed acquisition and mean-frequency checks. Each corner has three 160-to-300 MHz retune and reference-recovery tests per detector, three spectral channels per detector and two additional narrow-bandwidth runs. The largest absolute mean error over 4,096 output cycles was 41.35 ppm. The three input tables record the measured thermometer states, including time spent using coarse fallback. The replay interpolates between the measured codes. CI repeats the measurements at more coarse settings. [TT results](sampled/tt/qualification.json) · [SS results](sampled/ss/qualification.json) · [FF results](sampled/ff/qualification.json)
+All 42 cases in the checked-in sampled sweeps passed acquisition and mean-frequency checks. Each corner has three 160-to-300 MHz retune and reference-recovery tests per detector, three spectral channels per detector and two additional narrow-bandwidth runs. The largest absolute mean error over 4,096 output cycles was 41.35 ppm. The three input tables record the measured thermometer states, including time spent using coarse fallback. The replay interpolates between measured codes. These local tables use a 650 ns settling window at coarse zero and the default static transient elsewhere. CI repeats the sweep with longer settling and more coarse settings. [TT results](sampled/tt/qualification.json) · [SS results](sampled/ss/qualification.json) · [FF results](sampled/ff/qualification.json)
 
 | Corner | 256.25 MHz strongest line, fine / coarse | Lower adjacent channel TIE, fine / narrow | Upper adjacent channel TIE, fine / narrow |
 | --- | ---: | ---: | ---: |
@@ -54,7 +56,7 @@ Each selected coarse code is measured at fine 0, 64 and 128. For a proof of adja
 
 For fresh sweeps, the transistor bench decodes the three replica voltages with the same thermometer truth table as the RTL. The waveform record preserves the duration of valid subdivisions and intervening coarse fallback. At fast 0:0, the far replica briefly retains its previous state and 13.67% of the cycle uses fallback. At 0:64 this falls to 0.77%. The replay drives the receiver through these intervals and records how many reference samples actually use fallback. An unrepresentable reversal or an unordered coarse cycle fails the fine replay.
 
-CI distributes the same requested coarse codes across three runners per corner. The combine step checks the provenance, exact code pairs, supply, temperature and digest of each part before replay. A single local sweep produces the same table without partitioning.
+CI allows 900 ns for settling at every code, distributes the requested codes across five runners per corner and requires two adjacent slow-cold ranges to overlap at 300 MHz. The combine step checks the provenance, exact code pairs, supply, temperature and digest of each part before replay. A single local sweep produces the same table without partitioning.
 
 For a fast reproduction, copy one checked-in directory such as `results/range-dco/sampled/ff` to `build/replay-ff` and run `python3 tests/qualify_pex.py replay --sampled --output build/replay-ff`. The manifest identifies the measured sweep and extraction used by that replay.
 
