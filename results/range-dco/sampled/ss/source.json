@@ -1,0 +1,21 @@
+{
+  "corner": "ss",
+  "vdd": 1.62,
+  "temp_c": 0.0,
+  "coarse_codes": [
+    0,
+    80,
+    159,
+    160,
+    192
+  ],
+  "fine_codes": [
+    0,
+    64,
+    128
+  ],
+  "netlist_sha256": "f7d523c8cda19a4d1f92c4fcff04985cf8ef561f693ae2a5bf3f7deb3d5d81ea",
+  "sweep_sha256": "848c276146dc0b6b5b409954f6a2200dc1854d19b2fef97e7e1837db8b28caf2",
+  "settling": "650 ns at coarse zero, default static window at other codes",
+  "decoder": "measured thermometer word and coarse fallback"
+}

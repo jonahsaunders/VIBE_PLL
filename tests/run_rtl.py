@@ -4,6 +4,7 @@
 
 import argparse
 import csv
+import json
 import math
 from pathlib import Path
 import subprocess
@@ -48,7 +49,8 @@ def phase_centers(widths):
     return centers
 
 
-def spice_table(source, destination, *, ideal_quarter_bins=False, lut_point=None, phase_shape=None):
+def spice_table(source, destination, *, ideal_quarter_bins=False, lut_point=None, phase_shape=None,
+                coarse_only=False):
     with source.open(newline="", encoding="ascii") as file:
         rows = list(csv.DictReader(file))
     if not rows or "fine_code" not in rows[0]:
@@ -77,15 +79,26 @@ def spice_table(source, destination, *, ideal_quarter_bins=False, lut_point=None
             if sum(group) <= 0:
                 raise ValueError("The replacement phase shape must cover all coarse intervals")
             proportions.extend(width / sum(group) for width in group)
+    use_decoder = ("decoder_slots_ui" in rows[0] and not coarse_only and proportions is None and lut_point is None)
     sweeps = {}
     for row in rows:
         coarse, fine = int(row["code"]), int(row["fine_code"])
         points = sweeps.setdefault(fine, {})
         if coarse in points or not (0 <= coarse <= 255 and 0 <= fine <= 128):
             raise ValueError(f"Duplicate or invalid DCO code {coarse}:{fine}")
-        if int(row["bad_tap_sequences"]) or int(row["bad_fine_sequences"]):
+        has_coarse = coarse_only and all(row.get(f"bin_{i}_ui") for i in range(10))
+        if int(row["bad_tap_sequences"]) or (not use_decoder and not has_coarse and int(row["bad_fine_sequences"])):
             raise ValueError(f"Illegal phase tap order at {coarse}:{fine}")
-        values = [float(row["frequency_mhz"])] + [float(row[f"fine_bin_{i}_ui"]) for i in range(40)]
+        if use_decoder:
+            widths = [float(w) for w in row["decoder_slots_ui"].split()]
+            if int(row["unmodeled_decoder_cycles"]) or len(widths) != 90:
+                raise ValueError(f"Unsupported measured decoder waveform at {coarse}:{fine}")
+        elif has_coarse:
+            widths = [width for i in range(10)
+                      for width in (float(row[f"bin_{i}_ui"]), 0.0, 0.0, 0.0)]
+        else:
+            widths = [float(row[f"fine_bin_{i}_ui"]) for i in range(40)]
+        values = [float(row["frequency_mhz"]), *widths]
         if (not all(math.isfinite(value) and value >= 0 for value in values) or
             values[0] <= 0 or not math.isclose(sum(values[1:]), 1, abs_tol=1e-5)):
             raise ValueError(f"Invalid phase-bin or frequency at {coarse}:{fine}")
@@ -102,7 +115,8 @@ def spice_table(source, destination, *, ideal_quarter_bins=False, lut_point=None
     max_code = max(max(points) for points in sweeps.values())
     curves = [coarse_curve(sweeps[fine], max_code) for fine in anchors]
     with destination.open("w", encoding="ascii") as file:
-        file.write(f"{len(anchors)} {max_code}\n" + " ".join(map(str, anchors)) + "\n")
+        columns = " 90" if use_decoder else ""
+        file.write(f"{len(anchors)} {max_code}{columns}\n" + " ".join(map(str, anchors)) + "\n")
         for code, entries in enumerate(zip(*curves)):
             if any(b[0] <= a[0] for a, b in zip(entries, entries[1:])):
                 raise ValueError(f"Nonmonotonic interpolated fine sweep at code {code}")
@@ -138,6 +152,7 @@ def main():
     parser.add_argument("--compiled-testbench", type=Path,
                         help="reuse a tb_pll.vvp compiled with the matching calibration and replica settings")
     parser.add_argument("--trace", type=Path, help="write a nominal transient trace CSV")
+    parser.add_argument("--report", type=Path, help="write the outcome of each scenario as JSON")
     parser.add_argument("--spice-data", type=Path, help="use a single PVT DCO sweep CSV")
     parser.add_argument("--corner-grid", action="store_true", help="run the fixed-center PVT regression grid")
     parser.add_argument("--ref", type=float, default=25.0, help="reference MHz for --spice-data")
@@ -155,6 +170,7 @@ def main():
     parser.add_argument("--slow-phase-profile", action="store_true", help="use the slow-cold fixed table")
     parser.add_argument("--tracking-replicas", action="store_true",
                         help="use the tracking-replica fixed tables with a matching SPICE sweep")
+    parser.add_argument("--range-dco", action="store_true", help="use the range-DCO extracted phase tables")
     parser.add_argument("--phase-lut-point", type=int, nargs=2, metavar=("COARSE", "FINE"),
                         help="derive the fixed replay LUT from this measured sweep point")
     phase_group = parser.add_mutually_exclusive_group()
@@ -168,14 +184,16 @@ def main():
     parser.add_argument("--startup-delay-ps", type=float, default=173.209,
                         help="initial oscillator phase offset in the behavioral plant")
     args = parser.parse_args()
+    if args.range_dco and not args.tracking_replicas:
+        parser.error("--range-dco requires --tracking-replicas")
     if args.fixed_centers and args.calibrate:
         parser.error("--calibrate requires on-chip calibration")
     if args.corner_grid and (not args.fixed_centers or args.spice_data or args.spectrum):
         parser.error("--corner-grid requires --fixed-centers and uses the repository sweeps")
     if args.slow_phase_profile and (not args.fixed_centers or args.coarse_phase):
         parser.error("--slow-phase-profile requires the fixed fine detector")
-    if args.tracking_replicas and (not args.spice_data or not args.fixed_centers or args.coarse_phase):
-        parser.error("--tracking-replicas requires a matching SPICE sweep and the fixed fine detector")
+    if args.tracking_replicas and (not args.spice_data or not args.fixed_centers):
+        parser.error("--tracking-replicas requires a matching SPICE sweep and fixed centers")
     if args.phase_lut_point and (not args.spice_data or not args.fixed_centers or
                                  args.coarse_phase or args.slow_phase_profile):
         parser.error("--phase-lut-point requires a single SPICE sweep and the fixed fine detector")
@@ -187,18 +205,22 @@ def main():
     if args.spectrum_edges < 2 or args.spectrum_settle < 0:
         parser.error("spectrum capture requires at least two edges and nonnegative settling")
     compiled = args.compiled_testbench.resolve(strict=True) if args.compiled_testbench else None
+    results = []
+    if args.report:
+        args.report.unlink(missing_ok=True)
     with tempfile.TemporaryDirectory(prefix="cpz4-rtl-") as temp:
         build = Path(temp)
         output = compiled or build / "tb_pll.vvp"
         common = [args.iverilog, "-g2012", "-Wall", "-Wno-timescale"]
         parameter = int(not args.fixed_centers)
         replicas = int(args.tracking_replicas)
+        range_dco = int(args.range_dco)
         if compiled is None:
             subprocess.run([*common, "-s", "cpz4_sky130", f"-Pcpz4_sky130.ON_CHIP_CAL={parameter}",
-                            f"-Pcpz4_sky130.TRACKING_REPLICAS={replicas}",
+                            f"-Pcpz4_sky130.TRACKING_REPLICAS={replicas}", f"-Pcpz4_sky130.RANGE_DCO={range_dco}",
                             "-t", "null", *RTL], check=True)
             subprocess.run([*common, "-s", "tb_pll", f"-Ptb_pll.ON_CHIP_CAL={parameter}",
-                            f"-Ptb_pll.TRACKING_REPLICAS={replicas}",
+                            f"-Ptb_pll.TRACKING_REPLICAS={replicas}", f"-Ptb_pll.RANGE_DCO={range_dco}",
                             "-o", output, *RTL, ROOT / "tests" / "tb_pll.sv"], check=True)
         if not args.spice_data and not args.spectrum and not args.corner_grid and compiled is None:
             for top, module in (("tb_edge_counter", "phase_sampler.sv"),
@@ -228,7 +250,8 @@ def main():
         elif args.spice_data:
             table = build / "dco.txt"
             max_code = spice_table(args.spice_data, table, ideal_quarter_bins=args.ideal_quarter_bins,
-                                   lut_point=args.phase_lut_point, phase_shape=args.phase_shape)
+                                   lut_point=args.phase_lut_point, phase_shape=args.phase_shape,
+                                   coarse_only=args.coarse_phase)
             extra = [f"+spice_table={table}", f"+ref={args.ref}", f"+code_ceiling={max_code}"]
             if args.phase_lut_point:
                 extra.append(f"+phase_lut={table.with_suffix('.lut')}")
@@ -249,7 +272,8 @@ def main():
         for label, options in scenarios.items():
             print(f"CASE {label}", flush=True)
             command = [args.vvp, output, *options, f"+startup_delay_ps={args.startup_delay_ps}",
-                       f"+expected_calibration={parameter}", f"+expected_tracking_replicas={replicas}"]
+                       f"+expected_calibration={parameter}", f"+expected_tracking_replicas={replicas}",
+                       f"+expected_range_dco={range_dco}"]
             if args.tracking_gear is not None:
                 command.append(f"+tracking_gear={args.tracking_gear}")
             if args.calibrate:
@@ -266,7 +290,16 @@ def main():
                 command += [f"+spectrum_edges={args.spectrum_edges}", f"+spectrum_settle={args.spectrum_settle}"]
             if args.trace and label in ("nominal", "spice_interpolated"):
                 command.append(f"+trace={args.trace.resolve()}")
-            subprocess.run(command, check=True)
+            if args.report:
+                result = subprocess.run(command, capture_output=True, text=True)
+                print(result.stdout, end="")
+                print(result.stderr, end="")
+                results.append({"scenario": label, "passed": result.returncode == 0,
+                                "output": result.stdout.splitlines()})
+                args.report.write_text(json.dumps({"scenarios": results}, indent=2) + "\n")
+                result.check_returncode()
+            else:
+                subprocess.run(command, check=True)
 
 
 if __name__ == "__main__":

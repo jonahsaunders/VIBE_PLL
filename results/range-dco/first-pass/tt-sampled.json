@@ -1,0 +1,120 @@
+{
+  "passed": false,
+  "sampled_pass": true,
+  "source": {
+    "corner": "tt",
+    "vdd": 1.8,
+    "temp_c": 25,
+    "coarse_codes": [
+      0,
+      52,
+      96
+    ],
+    "fine_codes": [
+      0,
+      64,
+      128
+    ],
+    "netlist_sha256": "81eb05cac298d82af61d0a5266a6e070201fd91bd4feff5dcf442b435957c654",
+    "sweep_sha256": "2ab940e3ae6b49af29383b651be1190a34556e39aee996099e7d80dd7ecd9185",
+    "settling": "650 ns at code zero; default transient at codes 52 and 96"
+  },
+  "coverage": {
+    "low_mhz": 84.0857,
+    "high_mhz": 343.1746,
+    "brackets_target": true,
+    "unmeasured_intervals": [
+      [
+        0,
+        52
+      ],
+      [
+        52,
+        96
+      ]
+    ],
+    "gaps_mhz": []
+  },
+  "cases": [
+    {
+      "case": "fine-range",
+      "passed": true
+    },
+    {
+      "case": "fine-41984",
+      "passed": true,
+      "spectrum_1khz_10mhz": {
+        "clock_mhz": 256.2500000276144,
+        "rms_tie_ps": 6.727294697220863,
+        "band_tie_ps": 6.681289883568028,
+        "offset_hz": -231182.57525074313,
+        "strongest_line_dbc": -59.6610527085911,
+        "resolution_hz": 488.75808721087344
+      }
+    },
+    {
+      "case": "fine-40959",
+      "passed": true,
+      "spectrum_1khz_10mhz": {
+        "clock_mhz": 249.9938966544533,
+        "rms_tie_ps": 59.08306091689239,
+        "band_tie_ps": 58.89981302471189,
+        "offset_hz": 61033.66617540364,
+        "strongest_line_dbc": -24.22636126314633,
+        "resolution_hz": 476.82551699534093
+      }
+    },
+    {
+      "case": "fine-40961",
+      "passed": true,
+      "spectrum_1khz_10mhz": {
+        "clock_mhz": 250.00610359716453,
+        "rms_tie_ps": 59.105393338390876,
+        "band_tie_ps": 59.12480700686406,
+        "offset_hz": -61036.64638602649,
+        "strongest_line_dbc": -24.123976281138933,
+        "resolution_hz": 476.84879989083197
+      }
+    },
+    {
+      "case": "coarse-range",
+      "passed": true
+    },
+    {
+      "case": "coarse-41984",
+      "passed": true,
+      "spectrum_1khz_10mhz": {
+        "clock_mhz": 256.2500006092867,
+        "rms_tie_ps": 6.586542599551545,
+        "band_tie_ps": 6.60731677191386,
+        "offset_hz": -252199.17357328787,
+        "strongest_line_dbc": -52.58364791461419,
+        "resolution_hz": 488.7580883203253
+      }
+    },
+    {
+      "case": "coarse-40959",
+      "passed": true,
+      "spectrum_1khz_10mhz": {
+        "clock_mhz": 249.99389652733478,
+        "rms_tie_ps": 59.68996698805921,
+        "band_tie_ps": 59.56132013201425,
+        "offset_hz": 61033.66614436884,
+        "strongest_line_dbc": -24.13457499894278,
+        "resolution_hz": 476.8255167528816
+      }
+    },
+    {
+      "case": "coarse-40961",
+      "passed": true,
+      "spectrum_1khz_10mhz": {
+        "clock_mhz": 250.00610347045395,
+        "rms_tie_ps": 59.888125035444766,
+        "band_tie_ps": 59.969850262163575,
+        "offset_hz": -61036.646355091296,
+        "strongest_line_dbc": -24.07225904153291,
+        "resolution_hz": 476.84879964915075
+      }
+    }
+  ]
+}

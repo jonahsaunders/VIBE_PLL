@@ -31,6 +31,8 @@ def main():
     route = ROOT / "build/evidence/route"
     osc = ROOT / "build/evidence/oscillator"
     results = ROOT / "results"
+    summary = json.loads((ROOT / "build/evidence/summary/summary.json").read_text())
+    require(summary["commit"] == a.source_commit, "Summary and recorded source disagree")
     ci = json.loads((ROOT / "build/evidence/ci-verification.json").read_text())
     full = json.loads((route / "physical-verification.json").read_text())
     macro = json.loads((osc / "dco-verification.json").read_text())
@@ -77,18 +79,32 @@ def main():
                             f"{float(row['frequency_mhz']):.4f} MHz | {row['missing_fine_bins']} |")
         shutil.copyfile(source, results / ("rev4-pex-" + name + ".csv"))
     url = f"https://github.com/jonahsaunders/VIBE_PLL/actions/runs/{a.run_id}"
-    rtl = (ROOT / "build/evidence/rtl.log").read_text()
-    passes = [re.sub(r"^\S+Z ", "", line) for line in rtl.splitlines() if "PASS " in line]
-    require(sum("PASS ref=" in line for line in passes) == 21, "Expected 21 passing PLL scenarios")
+    passes = []
+    for mode, count in (("fixed", 4), ("corners", 12), ("calibration", 4), ("tracking", 1)):
+        path = ROOT / "build/evidence/rtl" / (mode + ".json")
+        cases = json.loads(path.read_text())["scenarios"]
+        require(len(cases) == count and len({c["scenario"] for c in cases}) == count
+                and all(c["passed"] is True for c in cases), f"Incomplete {mode} regression")
+        passes.extend(f"{mode}/{c['scenario']} {line}" for c in cases for line in c["output"]
+                      if line.startswith("PASS ref="))
+    require(len(passes) == 21, "Expected 21 passing PLL scenarios")
     (results / "rev4-rtl-regression.txt").write_text(
         f"Source commit: {a.source_commit}\nWorkflow: {url}\n"
         "Modeled/schematic replay; not extracted PLL qualification.\n\n" + "\n".join(passes) + "\n")
-    log = (route / "openroad.log").read_text()
-    def metric(name):
-        values = re.findall(name + r"\s+([-+0-9.]+)", log)
-        require(bool(values), "Missing timing metric: " + name)
-        return float(values[-1])
-    setup, hold, tns = metric("worst slack max"), metric("worst slack min"), metric("tns max")
+    timing = summary["timing"]
+    require(timing == json.loads((route / "timing-verification.json").read_text())
+            and timing["passed"], "Timing records disagree or timing failed")
+    require(summary["physical"]["layout_sha256"] == full["layout_sha256"],
+            "Build summary and layout disagree")
+    area = summary["area"]
+    width, height = area["die_um"]
+    setup, hold, tns = (timing[key] for key in ("setup_wns_ns", "hold_wns_ns", "setup_tns_ns"))
+    replay_rows = []
+    for corner in ("tt", "ss", "ff"):
+        result = summary["extracted_replays"][corner]
+        require(result.get("sampled_pass") is True, f"Missing passing {corner} sampled replay")
+        continuous = "verified" if result["passed"] else "unverified between sampled codes"
+        replay_rows.append(f"| {corner.upper()} | {len(result['cases'])} passed | {continuous} |")
     provenance = {"design_commit": a.source_commit, "workflow_url": url,
                   "pdk": "sky130-fa87f8f4bbcc7255b6f0c0fb506960f531ae2392",
                   "orfs_image": "openroad/orfs@sha256:73275384ed91270ea0e5f47710b3c2ff1b91708440c0744208ff226b751f88a0",
@@ -96,7 +112,7 @@ def main():
                   "layout_sha256": full["layout_sha256"], "reference_sha256": full["reference_sha256"],
                   "image_sha256": sha(ROOT / "docs/rev4-pll-layout.png"),
                   "setup_slack_ns": setup, "hold_slack_ns": hold, "setup_tns_ns": tns,
-                  "tracking_replicas": 1, "on_chip_cal": 0, "max_coarse_code": 255}
+                  "area": area, "unresolved_spef_names": timing["unresolved_spef_names"]}
     (results / "rev4-build-provenance.json").write_text(json.dumps(provenance, indent=2) + "\n")
     layout = ROOT / "layout"
     layout.mkdir(exist_ok=True)
@@ -113,8 +129,7 @@ GDS SHA-256: `{full['layout_sha256']}`
 Reference SHA-256: `{full['reference_sha256']}`
 
 Decompress with standard gzip tools. See [verification and physical limits](../results/rev4-layout.md)
-and [reproduction commands](../physical/README.md). These are geometrically and
-electrically matched artifacts; timing and analog qualification remain open.
+and [reproduction commands](../physical/README.md).
 """)
     old = (results / "rev4-layout.md").read_text(encoding="utf-8")
     prefix = re.split(r"^## Full-PLL (?:status|result)", old, maxsplit=1, flags=re.M)[0]
@@ -145,11 +160,9 @@ bind the actual layout to the input hashes. The reference comes from intended
 OpenDB connectivity and real PDK device definitions, including the documented
 tie-cell conductor shorts.
 
-The floorplan is **600 x 400 micrometers**, larger than the original 400 x 250
-planning target. This build enables tracking replicas and fixed-center tables,
-with a coarse ceiling of 255. On-chip calibration and the other original
-build-time modes remain available and require their own physical builds.
-Both source-branch histories are retained in main.
+The routed outline is **{width:g} × {height:g} µm** ({area['die_mm2']:.4f} mm²).
+The original slot estimate was 400 × 250 µm. The mapped standard cells occupy
+{area['mapped_cell_area_um2']:.0f} µm².
 
 The [captured RTL regression](rev4-rtl-regression.txt) records 21 passing PLL
 scenarios. The [negative-check log](rev4-checker-guards.txt) shows that wrong
@@ -168,7 +181,7 @@ dimensions and connectivity remain part of the comparison.
 The enabled checks do not establish harness, seal-ring, density, complete
 analog antenna, jitter, or full PVT/CDC sign-off. The routed TT timing report
 gives worst setup slack **{setup:.2f} ns**, worst hold slack **{hold:.2f} ns**,
-and setup TNS **{tns:.2f} ns**. Timing closure remains open.
+and setup TNS **{tns:.2f} ns**, with {timing['unresolved_spef_names']} unresolved SPEF names.
 
 Magic-extracted oscillator measurements from the same build are:
 
@@ -176,23 +189,18 @@ Magic-extracted oscillator measurements from the same build are:
 | --- | --- | --- | --- |
 {chr(10).join(measurements)}
 
-The extracted slow corner does not cover the full 160-300 MHz target, and
-missing fine bins require phase-detector characterization and tuning. Original
-circuitry and RTL modes are retained, but their post-layout performance has not
-been established by the schematic regressions or by DRC/LVS.
-Raw measurements: [nominal](rev4-pex-tt.csv), [TT upper code](rev4-pex-tt-max.csv),
-and [slow-cold upper code](rev4-pex-ss-max.csv).
+| Extracted corner | Closed-loop cases | Adjacent-code coverage of 160–300 MHz |
+| --- | --- | --- |
+{chr(10).join(replay_rows)}
+
+The [workflow artifacts]({url}#artifacts) contain the measured tuning sweeps,
+phase widths, and replay spectra. The raw endpoint records are
+[nominal](rev4-pex-tt.csv), [TT upper code](rev4-pex-tt-max.csv), and
+[slow-cold upper code](rev4-pex-ss-max.csv).
 
 See [commands and configuration](../physical/README.md).
 """
     (results / "rev4-layout.md").write_text(prefix + tail, encoding="utf-8")
-    readme = ROOT / "README.md"
-    text = readme.read_text(encoding="utf-8")
-    text = text.replace("![Rev. 4 tracking-replica oscillator layout](docs/rev4-dco-layout.png)",
-                        "![Rev. 4 routed PLL layout](docs/rev4-pll-layout.png)")
-    text = text.replace("The tracking-replica oscillator layout passes the enabled geometry DRC checks and device-level LVS. [Layout verification and full-PLL status](results/rev4-layout.md).",
-                        "The complete standalone PLL passes enabled geometry DRC and full-device LVS. [Verified layout, records, and physical performance limits](results/rev4-layout.md). Timing and extracted analog qualification remain open.")
-    readme.write_text(text, encoding="utf-8")
     print(json.dumps(provenance, indent=2))
 
 

@@ -17,7 +17,8 @@ module cpz4_pll #(
         120'h3af3332f52a12181961531340ca040
     },
     parameter [7:0] MAX_COARSE_CODE = 8'd255,
-    parameter TRACKING_REPLICAS = 1'b0
+    parameter TRACKING_REPLICAS = 1'b0,
+    parameter RANGE_DCO = 1'b0
 ) (
     input  wire         ref_clk,
     input  wire         reset_n,
@@ -99,7 +100,15 @@ module cpz4_pll #(
                                        fine_valid, fine_bin, cfg_data[5:0], fine_center, read_center,
                                        read_hits, cal_busy, cal_valid, cal_error);
         end else begin : fixed_centers
-            localparam [959:0] PROFILES = TRACKING_REPLICAS ?
+            // Capacitance-extracted range-DCO probes in results/range-dco.
+            // Bin 0 occupies the least significant 12 bits of each table.
+            localparam [479:0] RANGE_TT = {
+                120'hffffffffff76eeceeceecde5cdecde, 120'hcdec4ebbdbbdbb8aaa9a29a29a291f,
+                120'h89b89b89b7826696696695e9569569, 120'h56944e3333333332ab2232232100ff};
+            localparam [479:0] RANGE_SS = {
+                120'hffffffffff43e85e85e85dd1d1dd1d, 120'hd1dc49b76b76b5ba709a19a19a18f3,
+                120'h84584583c74c6636636635c2520520, 120'h5194443763763762a11cc1cc1af0c9};
+            localparam [959:0] PROFILES = RANGE_DCO ? {RANGE_SS, RANGE_TT} : TRACKING_REPLICAS ?
                 {TRACKING_SLOW_CENTERS, TRACKING_FINE_CENTERS} : {SLOW_FINE_CENTERS, FIXED_FINE_CENTERS};
             wire [6:0] detector_index = slow_phase_profile ? {1'b0, fine_bin} + 7'd40 : {1'b0, fine_bin};
             wire [6:0] read_index = slow_phase_profile ? {1'b0, cfg_data[5:0]} + 7'd40 : {1'b0, cfg_data[5:0]};
@@ -112,12 +121,25 @@ module cpz4_pll #(
             assign cal_error = 0;
         end
     endgenerate
+    // Capture the count, decoded phase and validity from the same sample.
+    // This separates the asynchronous-tap decoder from the loop arithmetic.
+    reg [23:0] measured_phase;
+    reg measured_valid;
+    always @(posedge ref_clk or negedge run_n) begin
+        if (!run_n) begin
+            measured_phase <= 0;
+            measured_valid <= 0;
+        end else begin
+            measured_phase <= {cycles, phase_center};
+            measured_valid <= phase_valid;
+        end
+    end
     cpz4_loop_control loop_filter(.ref_clk(ref_clk), .reset_n(run_n), .restart(restart),
         .ref_timeout(watchdog_ref), .manual(manual), .dither_enable(dither),
         .narrow_near_integer(narrow_near_integer),
         .manual_code(manual_code), .code_ceiling(code_ceiling), .ref_upper_mhz(ref_upper_mhz),
-        .tracking_gear(tracking_gear), .ratio_q12(ratio), .phase_valid(phase_valid),
-        .phase_q12({cycles, phase_center}), .dco_code(dco_code), .fine_code(fine_code),
+        .tracking_gear(tracking_gear), .ratio_q12(ratio), .phase_valid(measured_valid),
+        .phase_q12(measured_phase), .dco_code(dco_code), .fine_code(fine_code),
         .locked(core_locked), .fault_code(loop_fault), .gain_q12(gain), .state(loop_state));
 
     // Register each cell command to avoid decoder glitches during binary carries.

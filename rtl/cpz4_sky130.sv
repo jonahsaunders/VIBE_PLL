@@ -5,7 +5,8 @@
 module cpz4_sky130 #(
     parameter ON_CHIP_CAL = 1'b0,
     parameter [7:0] MAX_COARSE_CODE = 8'd255,
-    parameter TRACKING_REPLICAS = 1'b0
+    parameter TRACKING_REPLICAS = 1'b0,
+    parameter RANGE_DCO = 1'b0
 ) (
     input  wire        VDD_CORE,
     input  wire        VDD_DCO,
@@ -23,7 +24,7 @@ module cpz4_sky130 #(
     wire osc_enable;
 
     cpz4_pll #(.ON_CHIP_CAL(ON_CHIP_CAL), .MAX_COARSE_CODE(MAX_COARSE_CODE),
-              .TRACKING_REPLICAS(TRACKING_REPLICAS)) controller(
+              .TRACKING_REPLICAS(TRACKING_REPLICAS), .RANGE_DCO(RANGE_DCO)) controller(
                        .ref_clk(ref_clk), .reset_n(ctrl[22]), .enable(ctrl[21]),
                        .cfg_toggle(ctrl[20]), .cfg_addr(ctrl[19:17]), .cfg_data(ctrl[16:0]),
                        .dco_tap(taps), .dco_fine_tap(fine_taps), .dco_enable(osc_enable),

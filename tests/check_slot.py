@@ -32,7 +32,8 @@ def lef_cells(path):
     return cells
 
 
-def map_cells(yosys, liberty, on_chip_cal, mapped_netlist=None, max_coarse_code=255, tracking_replicas=False):
+def map_cells(yosys, liberty, on_chip_cal, mapped_netlist=None, max_coarse_code=255,
+              tracking_replicas=False, range_dco=False):
     executable = shutil.which(yosys)
     if executable is None:
         raise FileNotFoundError(f"Cannot find Yosys executable: {yosys}")
@@ -46,7 +47,7 @@ def map_cells(yosys, liberty, on_chip_cal, mapped_netlist=None, max_coarse_code=
         script = [
             "read_verilog -sv " + " ".join(path.name for path in rtl),
             f"chparam -set ON_CHIP_CAL {int(on_chip_cal)} -set MAX_COARSE_CODE {max_coarse_code} "
-            f"-set TRACKING_REPLICAS {int(tracking_replicas)} {TOP}",
+            f"-set TRACKING_REPLICAS {int(tracking_replicas)} -set RANGE_DCO {int(range_dco)} {TOP}",
             f"synth -top {TOP} -flatten -noabc",
             "dfflibmap -liberty cells.lib",
             "abc -liberty cells.lib -dont_use sky130_fd_sc_hd__lpflow* -dont_use sky130_fd_sc_hd__probe*",
@@ -89,8 +90,11 @@ def main():
     parser.add_argument("--slot", required=True, type=float, nargs=2, metavar=("WIDTH", "HEIGHT"))
     parser.add_argument("--dco-reserve", required=True, type=float, nargs=2, metavar=("WIDTH", "HEIGHT"),
                         help="oscillator block including its halo, in micrometers")
-    parser.add_argument("--edge-reserve", required=True, type=float, metavar="UM",
-                        help="per-edge space for wrapper access and the power grid")
+    core = parser.add_mutually_exclusive_group(required=True)
+    core.add_argument("--edge-reserve", type=float, metavar="UM",
+                      help="per-edge space for wrapper access and the power grid")
+    core.add_argument("--core-size", type=float, nargs=2, metavar=("WIDTH", "HEIGHT"),
+                      help="placement core dimensions when the routed outline has asymmetric margins")
     parser.add_argument("--utilization", required=True, type=float,
                         help="maximum standard-cell utilization of remaining rows")
     parser.add_argument("--on-chip-cal", action="store_true", help="include the calibration histogram")
@@ -99,17 +103,23 @@ def main():
     parser.add_argument("--tracking-replicas", action="store_true",
                         help="select the phase tables for the DCO-biased replica netlist")
     parser.add_argument("--mapped-netlist", type=Path, help="export mapped Verilog for physical design")
+    parser.add_argument("--range-dco", action="store_true", help="map the extracted phase-center tables")
+    parser.add_argument("--report", type=Path, help="write the floorplan estimate as JSON")
     args = parser.parse_args()
     positive_pair(parser, "--slot", args.slot)
     positive_pair(parser, "--dco-reserve", args.dco_reserve)
-    if not math.isfinite(args.edge_reserve) or args.edge_reserve < 0:
+    if args.core_size:
+        positive_pair(parser, "--core-size", args.core_size)
+        if any(core > die for core, die in zip(args.core_size, args.slot)):
+            parser.error("placement core exceeds the die dimensions")
+    elif not math.isfinite(args.edge_reserve) or args.edge_reserve < 0:
         parser.error("--edge-reserve must be finite and nonnegative")
     if not 0 < args.utilization <= 1:
         parser.error("--utilization must be a fraction in (0, 1]")
     if not 16 <= args.max_coarse_code <= 255:
         parser.error("--max-coarse-code must be in 16..255")
 
-    inner_width, inner_height = (x - 2 * args.edge_reserve for x in args.slot)
+    inner_width, inner_height = args.core_size or [x - 2 * args.edge_reserve for x in args.slot]
     dco_width, dco_height = args.dco_reserve
     sites = math.floor(inner_width / SITE_WIDTH + 1e-8)
     rows = math.floor(inner_height / ROW_HEIGHT + 1e-8)
@@ -119,7 +129,7 @@ def main():
         parser.error("DCO reservation extends outside the grid-aligned core")
 
     mapped = map_cells(args.yosys, args.liberty, args.on_chip_cal, args.mapped_netlist,
-                       args.max_coarse_code, args.tracking_replicas)
+                       args.max_coarse_code, args.tracking_replicas, args.range_dco)
     if mapped.pop(BLOCK, 0) != 1:
         parser.error("expected one DCO hard-macro instance")
     cells = lef_cells(args.lef)
@@ -138,6 +148,17 @@ def main():
     site_area = SITE_WIDTH * ROW_HEIGHT
     allowance = math.floor(available * args.utilization)
     fits = occupied <= allowance and pack_rows(widths, row_widths)
+    if args.report:
+        args.report.write_text(json.dumps({
+            "die_um": args.slot, "die_mm2": math.prod(args.slot) / 1e6,
+            "core_um": [inner_width, inner_height],
+            "dco_reserve_um": args.dco_reserve, "utilization_limit": args.utilization,
+            "mapped_cell_area_um2": occupied * site_area,
+            "available_row_area_um2": available * site_area,
+            "minimum_area_before_margins_mm2":
+                (occupied * site_area / args.utilization + dco_width * dco_height) / 1e6,
+            "planning_fit": fits,
+        }, indent=2) + "\n", encoding="utf-8")
     print(f"Slot {args.slot[0]:.2f} x {args.slot[1]:.2f} um; DCO reservation {dco_width:.2f} x {dco_height:.2f} um")
     print(f"Sky130 HD cells: {len(widths)}, area: {occupied*site_area:.2f} um^2")
     print(f"Available digital rows: {available*site_area:.2f} um^2, utilized: {100*occupied/available:.2f}%"

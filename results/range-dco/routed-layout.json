@@ -1,0 +1,82 @@
+{
+  "source_commit": "afae22e9659dde29cd99a5f2cbbdb0446b5c24ef",
+  "mapped_netlist_run": "https://github.com/jonahsaunders/VIBE_PLL/actions/runs/44154716251",
+  "mapped_verilog_sha256": "28b9bd8c6f212a0fe0d4ef4dad99c90561d00a2e58031e27742a74fd92eb0568",
+  "openroad": "26Q2-1164-g08f67ee5ec",
+  "klayout": "0.30.13",
+  "timing_corner": "TT, 25 C, 1.80 V",
+  "clocks_mhz": {
+    "dco": 400,
+    "reference": 32
+  },
+  "physical": {
+    "top": "cpz4_sky130",
+    "route_exit_code": 0,
+    "enabled_drc_groups": [
+      "feol",
+      "beol",
+      "offgrid"
+    ],
+    "lvs_geometry_mode": "deep",
+    "lvs_match": true,
+    "passed": true,
+    "layout_sha256": "0de7388242fec1e88aa1755dc747084fbbe9121fc352867d7cda2dfd491cf88c",
+    "reference_sha256": "183136a41fa835565850ecc88358992c6cd9c2257435aaff1ce8244fb989f215",
+    "drc_deck_sha256": "d4cc44d9c95c9b97b994904b20c573333636a8c6e3918bb3bb9e5534d7253149",
+    "lvs_deck_sha256": "9ac9ea80e91786510c2010f9f816a090d1879dbc22937b3280947be7cab2c890",
+    "drc_markers": 0,
+    "normalized_lvs_deck_sha256": "1eaa768676f1ba7f719ae282019747cb63d02fb4d1decdac9b1ced2be389ce81",
+    "route_drc": 0,
+    "route_checks": "All signal nets routed: 1\nAntenna-violating nets: 0\nPower grids connected: 1\n"
+  },
+  "timing": {
+    "passed": true,
+    "routed_spef_loaded": true,
+    "setup_wns_ns": 0.28,
+    "hold_wns_ns": 0.18,
+    "setup_tns_ns": 0.0,
+    "capture_endpoints_checked": 44,
+    "missing_capture_endpoints": [],
+    "minimum_capture_slack_ns": 0.447,
+    "unresolved_spef_names": 0,
+    "annotation_warnings": []
+  },
+  "dco_duty_percent": {
+    "45": {
+      "setup_wns_ns": 0.28,
+      "hold_wns_ns": 0.18,
+      "setup_tns_ns": 0.0
+    },
+    "50": {
+      "setup_wns_ns": 0.28,
+      "hold_wns_ns": 0.18,
+      "setup_tns_ns": 0.0
+    },
+    "55": {
+      "setup_wns_ns": 0.28,
+      "hold_wns_ns": 0.18,
+      "setup_tns_ns": 0.0
+    }
+  },
+  "area": {
+    "die_um": [
+      460.0,
+      330.0
+    ],
+    "die_mm2": 0.1518,
+    "core_um": [
+      450.0,
+      320.0
+    ],
+    "dco_reserve_um": [
+      298.0,
+      123.0
+    ],
+    "utilization_limit": 0.65,
+    "mapped_cell_area_um2": 52789.3792,
+    "available_row_area_um2": 105874.04160000001,
+    "minimum_area_before_margins_mm2": 0.11786842953846154,
+    "planning_fit": true
+  },
+  "layout_preview_sha256": "7bf3c6f18887dacfc76395d6fb5b1c3df6c5b2b2006f4301a2097703d016e846"
+}

@@ -1,0 +1,2 @@
+# Preserve the sweep bytes linked by the qualification record.
+tt-sampled-sweep.csv -text

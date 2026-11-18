@@ -16,6 +16,7 @@ read_lef $::env(DCO_LEF)
 read_liberty $::env(LIBERTY)
 read_verilog $::env(MAPPED_VERILOG)
 link_design cpz4_sky130
+set_dont_use {sky130_fd_sc_hd__probe* sky130_fd_sc_hd__lpflow*}
 
 # The row-packing model uses 400 x 250 um and a 5 um edge reservation.
 # Set these coordinates to the allocated wrapper dimensions for integration.
@@ -112,7 +113,22 @@ if {$detailed || $global_only} {
         write_def [file join $out power.def]
         clock_tree_synthesis -root_buf sky130_fd_sc_hd__clkbuf_4 \
             -buf_list {sky130_fd_sc_hd__clkbuf_2 sky130_fd_sc_hd__clkbuf_4}
+        # CTS derives scalar names from bus-bit clock roots. Use plain names
+        # for its new objects before exporting either Verilog or SPEF.
+        foreach objects [list [$block getInsts] [$block getNets]] {
+            foreach obj $objects {
+                set name [$obj getName]
+                if {[regexp {^(clkbuf_|clknet_|delaybuf_)} $name] && [regexp {[][]} $name]} {
+                    set clean [string map [list {[} {_bit_} {]} {}] $name]
+                    if {![$obj rename $clean]} { error "Clock-tree name collision: $clean" }
+                }
+            }
+        }
         set_propagated_clock [all_clocks]
+        estimate_parasitics -placement
+        repair_design
+        repair_timing -setup -setup_margin 1.0
+        repair_timing -hold -hold_margin 0.20
         detailed_placement
     }
     write_def [file join $out before-route.def]
@@ -120,6 +136,18 @@ if {$detailed || $global_only} {
         -congestion_report_file [file join $out congestion.rpt] -verbose]
     if {$detailed} { lappend route_args -allow_congestion }
     global_route {*}$route_args
+    if {$detailed} {
+        # Recheck short data paths against the routed clock insertion delays.
+        # Leave margin for the difference between global and detailed wires.
+        estimate_parasitics -global_routing
+        repair_timing -hold -hold_margin 0.20
+        global_route -start_incremental -allow_congestion
+        detailed_placement
+        global_connect
+        global_route -end_incremental -allow_congestion
+        estimate_parasitics -global_routing
+        write_guides [file join $out pll.guide]
+    }
     write_def [file join $out placed.def]
     report_checks -path_delay min_max -group_path_count 5
     source [file join $here capture_paths.tcl]
@@ -178,6 +206,7 @@ if {$detailed || $global_only} {
             set spef [file join $out routed.spef]
             write_spef $spef
             read_spef $spef
+            puts "Loaded routed SPEF $spef"
         } else {
             estimate_parasitics -global_routing
         }

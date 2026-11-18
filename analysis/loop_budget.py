@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Sampled-loop linearization, jitter estimates, and supply tone budgets.
 
-Requires NumPy. The model includes one actuation cycle and two capture cycles,
+Requires NumPy. The model includes one actuation cycle and three capture cycles,
 plus the accumulator's own unit delay. The default estimate uses an idealized
 detector quantizer. Optional spectra supply reference, DCO, and rail noise.
 """
@@ -12,10 +12,13 @@ import math
 
 import numpy as np
 
+# NumPy 1.x and 2.x use different names for the same integration rule.
+trapezoid = np.trapezoid if hasattr(np, "trapezoid") else np.trapz
+
 
 def open_loop(normalized_frequency, a, b):
     q = np.exp(-2j * np.pi * normalized_frequency)
-    return q**4 * (a + b / (1 - q)) / (1 - q)
+    return q**5 * (a + b / (1 - q)) / (1 - q)
 
 
 def tracking_coefficients(gain_ratio, tracking_gear):
@@ -42,7 +45,7 @@ def noise_budget(gear, gain_ratio, reference_hz, output_hz, spectra):
     reference_psd = 2 * 10**(reference / 10) * (output_hz / reference_hz)**2 * detector_response
     dco_psd = 2 * 10**(dco / 10) * oscillator_response
     supply_psd = supply * (pushing * 1e6 / offsets)**2 * oscillator_response
-    variances = np.trapezoid([reference_psd, dco_psd, supply_psd], offsets, axis=1)
+    variances = trapezoid([reference_psd, dco_psd, supply_psd], offsets, axis=1)
     jitter_ps = np.sqrt(variances) * 1e12 / (2 * math.pi * output_hz)
     return {"reference_rms_ps": jitter_ps[0], "dco_rms_ps": jitter_ps[1], "supply_rms_ps": jitter_ps[2],
             "total_rms_ps": np.linalg.norm(jitter_ps)}
@@ -74,9 +77,9 @@ def budget(mode, gain_ratio, reference_hz, output_hz, bins=40, tracking_gear=2):
     frac = gain_db[cross - 1] / (gain_db[cross - 1] - gain_db[cross])
     unity = f[cross - 1] + frac * (f[cross] - f[cross - 1])
     phase_at_unity = phase[cross - 1] + frac * (phase[cross] - phase[cross - 1])
-    noise_bw = reference_hz * np.trapezoid(abs(loop / (1 + loop))**2, f)
+    noise_bw = reference_hz * trapezoid(abs(loop / (1 + loop))**2, f)
     rms = 1 / (bins * output_hz * math.sqrt(12)) * math.sqrt(2 * noise_bw / reference_hz)
-    poles = np.roots([1, -2, 1, 0, a + b, -a])
+    poles = np.roots([1, -2, 1, 0, 0, a + b, -a])
     return {
         "a": a, "b": b, "unity_hz": unity * reference_hz,
         "phase_margin_deg": 180 + math.degrees(phase_at_unity),

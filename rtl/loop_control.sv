@@ -109,7 +109,10 @@ module cpz4_loop_control (
     wire [6:0] seed_next_code = {seed_code[5:0], seed_bit};
 
     wire [23:0] next_phase = target_phase + {7'b0, ratio_q12};
-    wire signed [23:0] phase_error = $signed(next_phase - phase_q12);
+    // target_phase predicts the current sample. Compute the following
+    // target in parallel with the PI update instead of adding the ratio
+    // on the path from the phase measurement to the fine DAC.
+    wire signed [23:0] phase_error = $signed(target_phase - phase_q12);
     wire error_negative = phase_error[23];
     wire [13:0] error_magnitude = (phase_error > 24'sd8192 || phase_error < -24'sd8192) ?
         14'd8192 : error_negative ? -phase_error[13:0] : phase_error[13:0];
@@ -373,7 +376,7 @@ module cpz4_loop_control (
                 ALIGN: begin
                     if (settle_left != 0) settle_left <= settle_left - 4'd1;
                     else if (phase_valid) begin
-                        target_phase   <= phase_q12;
+                        target_phase   <= phase_q12 + {7'b0, ratio_q12};
                         dither_residue <= 0;
                         lock_count      <= 0;
                         loss_count      <= 0;

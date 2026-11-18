@@ -4,7 +4,8 @@
 module tb_pll #(
     parameter ON_CHIP_CAL = 1'b1,
     parameter TRACKING_REPLICAS = 1'b0,
-    parameter [7:0] MAX_COARSE_CODE = 8'd255
+    parameter [7:0] MAX_COARSE_CODE = 8'd255,
+    parameter RANGE_DCO = 1'b0
 );
     reg ref_clk = 0, ref_running = 1;
     reg reset_n = 1, enable = 0, cfg_toggle = 0;
@@ -20,7 +21,7 @@ module tb_pll #(
     wire [11:0] status;
 
     cpz4_pll #(.ON_CHIP_CAL(ON_CHIP_CAL), .TRACKING_REPLICAS(TRACKING_REPLICAS),
-              .MAX_COARSE_CODE(MAX_COARSE_CODE))
+              .MAX_COARSE_CODE(MAX_COARSE_CODE), .RANGE_DCO(RANGE_DCO))
         dut(ref_clk, reset_n, enable, cfg_toggle, cfg_addr, cfg_data, taps, fine_ring,
                  dco_enable, therm, fine_therm, clk_out, clk_mon, status);
 
@@ -34,12 +35,24 @@ module tb_pll #(
     real widths [0:9];
     integer plant_anchor [0:127];
     real plant_frequency [0:32767];
-    real plant_widths [0:1310719];
+    real plant_widths [0:2949119];  // 256 codes × 128 anchors × up to 90 phase slots
     reg [4:0] patterns [0:9];
     integer phase_id, substep, tap_index, throwaway, model_file, model_row, model_col;
     integer model_status, active_code, active_fine, plant_rows, plant_max_code, base_row, upper_row, row_index;
     string model_path;
+    reg [1023:0] table_header;
+    integer phase_columns = 40, slots_per_bin = 4;
+    reg [2:0] measured_word;
     reg use_spice_model = 0;
+    integer decoder_samples = 0, fallback_samples = 0;
+    always @(posedge ref_clk) begin
+        if (use_spice_model && phase_columns == 90 && enable && dut.phase_valid) begin
+            decoder_samples = decoder_samples + 1;
+            if (!dut.fine_valid) fallback_samples = fallback_samples + 1;
+        end
+    end
+    final if (use_spice_model && phase_columns == 90)
+        $display("DETECTOR samples=%0d coarse_fallback=%0d", decoder_samples, fallback_samples);
     integer applied_code, applied_fine;
     always @* applied_code = $countones(therm);
     always @* applied_fine = $countones(fine_therm);
@@ -88,10 +101,13 @@ module tb_pll #(
         if ($value$plusargs("spice_table=%s", model_path)) begin
             model_file = $fopen(model_path, "r");
             if (model_file == 0) $fatal(1, "Could not open the SPICE plant table");
-            model_status = $fscanf(model_file, "%d %d", plant_rows, plant_max_code);
-            if (model_status != 2 || plant_rows < 2 || plant_rows > 128 ||
+            model_status = $fgets(table_header, model_file);
+            model_status = $sscanf(table_header, "%d %d %d", plant_rows, plant_max_code, phase_columns);
+            if ((model_status != 2 && model_status != 3) || (phase_columns != 40 && phase_columns != 90) ||
+                plant_rows < 2 || plant_rows > 128 ||
                 plant_max_code < 16 || plant_max_code > 255)
                 $fatal(1, "Invalid number of fine-code anchors");
+            slots_per_bin = phase_columns / 10;
             for (model_row = 0; model_row < plant_rows; model_row = model_row + 1) begin
                 model_status = $fscanf(model_file, "%d", row_index);
                 if (model_status != 1) $fatal(1, "Invalid fine-code anchor");
@@ -101,10 +117,10 @@ module tb_pll #(
                 model_status = $fscanf(model_file, "%f", model_value);
                 if (model_status != 1) $fatal(1, "Bad SPICE plant frequency row %d", model_row);
                 plant_frequency[model_row] = model_value;
-                for (model_col = 0; model_col < 40; model_col = model_col + 1) begin
+                for (model_col = 0; model_col < phase_columns; model_col = model_col + 1) begin
                     model_status = $fscanf(model_file, "%f", model_value);
                     if (model_status != 1) $fatal(1, "Bad SPICE plant tap row %d", model_row);
-                    plant_widths[40 * model_row + model_col] = model_value;
+                    plant_widths[phase_columns * model_row + model_col] = model_value;
                 end
             end
             $fclose(model_file);
@@ -136,21 +152,21 @@ module tb_pll #(
                 if (coherent_calibration) period_ps = 100000.0 / ref_mhz;
                 for (phase_id = 0; phase_id < 10 && dco_enable; phase_id = phase_id + 1) begin
                     tap_index = phase_id % 5;
-                    fine_ring[3*tap_index +: 3] = {3{~patterns[phase_id][tap_index]}} ^ 3'b101;
                     ring = patterns[phase_id];
-                    for (substep = 0; substep < 4; substep = substep + 1) begin
-                        model_col = 4 * phase_id + substep;
+                    for (substep = 0; substep < slots_per_bin; substep = substep + 1) begin
+                        model_col = slots_per_bin * phase_id + substep;
                         if (use_spice_model) begin
-                            model_value = plant_widths[40 * base_row + model_col] + fine_fraction *
-                              (plant_widths[40 * upper_row + model_col] - plant_widths[40 * base_row + model_col]);
-                            if (model_value > 0.0) #(period_ps * model_value);
-                        end else #(period_ps * widths[phase_id] / 4);
-                        if (substep < 3) begin
-                            if (use_spice_model && model_col < 39 &&
-                                plant_widths[40 * base_row + model_col + 1] == 0.0 &&
-                                plant_widths[40 * upper_row + model_col + 1] == 0.0)
-                                substep = 3;
-                            else fine_ring[3*tap_index + substep] = ~fine_ring[3*tap_index + substep];
+                            model_value = plant_widths[phase_columns * base_row + model_col] + fine_fraction *
+                              (plant_widths[phase_columns * upper_row + model_col] -
+                               plant_widths[phase_columns * base_row + model_col]);
+                        end else model_value = widths[phase_id] / 4;
+                        if (model_value > 0.0) begin
+                            if (phase_columns == 90 && substep % 2 == 0)
+                                measured_word = 3'b100;  // Hardware selects the coarse center on any illegal word.
+                            else
+                                measured_word = (1 << (phase_columns == 90 ? substep / 2 : substep)) - 1;
+                            fine_ring[3*tap_index +: 3] = measured_word ^ {3{~patterns[phase_id][tap_index]}} ^ 3'b101;
+                            #(period_ps * model_value);
                         end
                     end
                 end
@@ -265,6 +281,7 @@ module tb_pll #(
     real started, lost_us, hold_start, last_edge_ps, edge_mhz;
     integer initial_ratio, retune_ratio, value_unused, ref_bound, requested_gear, expected_calibration;
     integer expected_tracking_replicas;
+    integer expected_range_dco;
     integer spectrum_edges, spectrum_settle;
     reg [16:0] auto_mode;
     integer cal_code, test_ceiling;
@@ -293,6 +310,8 @@ module tb_pll #(
             expected_tracking_replicas != int'(TRACKING_REPLICAS))
             $fatal(1, "The testbench was compiled for a different phase detector");
         value_unused = $value$plusargs("startup_delay_ps=%f", startup_delay_ps);
+        if ($value$plusargs("expected_range_dco=%d", expected_range_dco) &&
+            expected_range_dco != int'(RANGE_DCO)) $fatal(1, "Wrong range-DCO build");
         value_unused = $value$plusargs("start_n=%d", initial_ratio);
         value_unused = $value$plusargs("retune_n=%d", retune_ratio);
         auto_mode = 0;
